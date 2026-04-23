@@ -1,3 +1,4 @@
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ReferenceLine, ResponsiveContainer } from 'recharts'
 import type { DCFOutput } from '../types/DCFOutput.ts'
 import type { Assumptions } from '../types/Assumptions.ts'
 import type { FinancialData } from '../types/FinancialData.ts'
@@ -59,6 +60,36 @@ interface DCFTabProps {
   dcfConfig: DCFConfig
   onDCFConfigChange: (partial: Partial<DCFConfig>) => void
   fieldCorrections?: Record<string, string>
+}
+
+/** Visual WACC formula row: Rf + (β × ERP) + SP = Ke, then blend with Kd */
+function WACCFormulaBar({
+  rf, erp, beta, sp, ke, kd, we, wd,
+}: {
+  rf: number; erp: number; beta: number; sp: number; ke: number; kd: number; we: number; wd: number
+}) {
+  return (
+    <div className="mb-4 p-3 rounded border border-[#30363D] bg-[#0D1117]">
+      <div className="text-[10px] font-mono clr-muted uppercase tracking-wider mb-2">Cost of Equity</div>
+      <div className="flex items-center flex-wrap gap-1 text-xs font-mono mb-3">
+        <span className="px-2 py-0.5 rounded bg-[#161B22] clr-blue">Rf {formatPercent(rf)}</span>
+        <span className="clr-muted">+</span>
+        <span className="px-2 py-0.5 rounded bg-[#161B22] clr-accent">(β {beta.toFixed(2)}</span>
+        <span className="clr-muted">×</span>
+        <span className="px-2 py-0.5 rounded bg-[#161B22] clr-accent">ERP {formatPercent(erp)})</span>
+        <span className="clr-muted">+</span>
+        <span className="px-2 py-0.5 rounded bg-[#161B22] clr-amber">SP {formatPercent(sp)}</span>
+        <span className="clr-muted">=</span>
+        <span className="px-2 py-0.5 rounded bg-[#00FF8820] border border-[#00FF88] clr-accent font-bold">Ke {formatPercent(ke)}</span>
+      </div>
+      <div className="text-[10px] font-mono clr-muted uppercase tracking-wider mb-2">WACC Blend</div>
+      <div className="flex items-center flex-wrap gap-1 text-xs font-mono">
+        <span className="px-2 py-0.5 rounded bg-[#161B22] clr-accent">{formatPercent(we)} × Ke {formatPercent(ke)}</span>
+        <span className="clr-muted">+</span>
+        <span className="px-2 py-0.5 rounded bg-[#161B22] clr-amber">{formatPercent(wd)} × Kd {formatPercent(kd)}</span>
+      </div>
+    </div>
+  )
 }
 
 export function DCFTab({
@@ -130,8 +161,29 @@ export function DCFTab({
     </span>
   )
 
+  // FCF bar chart data
+  const fcfChartData = dcfOutput.projections.map(p => ({
+    year: `Y${p.year}`,
+    fcf: p.freeCashFlow / 1e6, // millions
+  }))
+  const terminalValue = (dcfOutput.pvTerminalGordon ?? dcfOutput.pvTerminalExitMultiple ?? 0) / 1e6
+
   return (
     <div className="flex flex-col gap-4">
+      {/* ROIC Warning — amber banner ABOVE everything when triggered */}
+      {showRoicWarning && (
+        <div className="px-4 py-3 rounded border border-[#F0A500]/50 bg-[#F0A500]/10 flex items-start gap-3">
+          <span className="text-[#F0A500] text-base">⚠</span>
+          <div>
+            <p className="text-sm font-semibold font-mono text-[#F0A500]">Terminal Growth Exceeds ROIC</p>
+            <p className="text-xs clr-muted mt-0.5">
+              Terminal growth rate ({formatPercent(dcfA.terminal_growth_rate.value)}) exceeds current ROIC ({roic !== null ? formatPercent(roic) : 'N/A'}).
+              This implies the company creates value by growing — which may be optimistic. Review terminal value assumptions before relying on this output.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* WACC Build-Up summary — prominent traceability card */}
       <WACCBuildupCard
         wacc={waccA}
@@ -139,6 +191,19 @@ export function DCFTab({
         costOfEquity={dcfOutput.costOfEquity}
         afterTaxCostOfDebt={dcfOutput.afterTaxCostOfDebt}
       />
+
+      {/* WACC visual formula row */}
+      <WACCFormulaBar
+        rf={waccA.risk_free_rate.value}
+        erp={waccA.equity_risk_premium.value}
+        beta={waccA.beta.value}
+        sp={waccA.size_premium.value}
+        ke={dcfOutput.costOfEquity}
+        kd={dcfOutput.afterTaxCostOfDebt}
+        we={waccA.equity_weight.value}
+        wd={waccA.debt_weight.value}
+      />
+
       {/* Two-column grid of collapsible cards */}
       <div className="dcf-grid">
         {/* DCF Valuation — top left, open by default */}
@@ -149,11 +214,6 @@ export function DCFTab({
             currentPrice={currentPrice ?? null}
             modelName="DCF"
           />
-          {showRoicWarning && (
-            <div className="mb-3 px-3 py-2 dcf-warning">
-              Terminal growth exceeds current ROIC. Review the terminal value assumptions before relying on this output.
-            </div>
-          )}
           <table className="w-full text-xs font-mono">
             <tbody>
               {[
@@ -194,8 +254,49 @@ export function DCFTab({
           <CalcBreakdown formula={dcfBreakdown} />
         </CollapsibleCard>
 
-        {/* FCF Projection — top right, open by default */}
+        {/* FCF Projection — with bar chart above table */}
         <CollapsibleCard title="Free Cash Flow Projection" defaultOpen>
+          {/* Bar chart */}
+          {fcfChartData.length > 0 && (
+            <div className="mb-3">
+              <ResponsiveContainer width="100%" height={120}>
+                <BarChart data={fcfChartData} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                  <XAxis
+                    dataKey="year"
+                    tick={{ fontSize: 10, fontFamily: 'IBM Plex Mono', fill: '#8B949E' }}
+                    axisLine={{ stroke: '#30363D' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fontFamily: 'IBM Plex Mono', fill: '#8B949E' }}
+                    tickFormatter={(v: number) => `${v.toFixed(0)}M`}
+                    axisLine={false}
+                    tickLine={false}
+                    width={45}
+                  />
+                  <Tooltip
+                    formatter={(v: number) => [`$${v.toFixed(1)}M`, 'FCF']}
+                    contentStyle={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 4, fontSize: 11, fontFamily: 'IBM Plex Mono' }}
+                    labelStyle={{ color: '#8B949E' }}
+                  />
+                  <Bar dataKey="fcf" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+                    {fcfChartData.map((entry, i) => (
+                      <Cell key={i} fill={entry.fcf >= 0 ? '#00FF88' : '#F85149'} fillOpacity={0.75} />
+                    ))}
+                  </Bar>
+                  {terminalValue > 0 && (
+                    <ReferenceLine
+                      y={terminalValue}
+                      stroke="#F0A500"
+                      strokeDasharray="4 2"
+                      label={{ value: 'TV', position: 'right', style: { fontSize: 10, fill: '#F0A500', fontFamily: 'IBM Plex Mono' } }}
+                    />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+              <p className="text-[10px] font-mono clr-muted text-center">FCF by Year (Millions) — amber dash = Terminal Value level</p>
+            </div>
+          )}
           <div className="overflow-x-auto flex-1">
             <table className="w-full h-full text-xs font-mono">
               <thead>

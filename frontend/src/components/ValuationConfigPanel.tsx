@@ -146,13 +146,15 @@ export function ValuationConfigPanel({
                 onChange={v => onModelWeightChange('comps', v)}
                 color="#F0A500"
               />
-              <WeightSlider
-                label="DDM"
-                value={modelWeights.ddm}
-                onChange={v => onModelWeightChange('ddm', v)}
-                color="#4493F8"
-                disabled={!ddmApplicable}
-              />
+              <div className={!ddmApplicable ? 'opacity-40 transition-opacity' : 'transition-opacity'}>
+                <WeightSlider
+                  label="DDM"
+                  value={modelWeights.ddm}
+                  onChange={v => onModelWeightChange('ddm', v)}
+                  color="#4493F8"
+                  disabled={!ddmApplicable}
+                />
+              </div>
             </div>
           </div>
 
@@ -219,7 +221,7 @@ export function ValuationConfigPanel({
             </div>
 
             {/* DDM Sub-Weights */}
-            <div>
+            <div className={!ddmApplicable ? 'opacity-40 transition-opacity' : 'transition-opacity'}>
               <h5 className="text-[10px] uppercase tracking-wider font-mono clr-muted mb-2">
                 DDM Sub-Weights
               </h5>

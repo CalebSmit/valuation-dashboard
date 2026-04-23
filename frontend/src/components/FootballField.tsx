@@ -140,7 +140,7 @@ export function FootballField({
 
   return (
     <div className="w-full" data-export-football-field="true">
-      <ResponsiveContainer width="100%" height={bars.length * 44 + 40}>
+      <ResponsiveContainer width="100%" height={Math.max(220, bars.length * 44 + 40)}>
         <BarChart
           layout="vertical"
           data={bars}
