@@ -2,14 +2,27 @@
 
 Uses asyncio.to_thread to run synchronous Anthropic SDK calls off the
 event loop, preventing SSE stream stalls during long API calls.
+
+Model routing:
+- Standard mode: claude-haiku-4-5-20251001 (fast, cheap, very high rate limits)
+- Deep research mode: claude-sonnet-4-20250514 (multi-turn web search, higher quality)
+- Self-review: claude-haiku-4-5-20251001 (always, cost-efficient consistency check)
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Any
 
 import anthropic
+
+logger = logging.getLogger(__name__)
+
+# Model constants — change here to affect all standard / deep-research calls
+MODEL_STANDARD = "claude-haiku-4-5-20251001"      # Fast, high rate limits, low cost
+MODEL_DEEP_RESEARCH = "claude-sonnet-4-20250514"  # Multi-turn web search, better citations
+MODEL_SELF_REVIEW = "claude-haiku-4-5-20251001"   # Always Haiku — review is deterministic
 
 from services.agent import (
     SYSTEM_PROMPT, DEEP_RESEARCH_ADDENDUM, ASSUMPTIONS_TOOL,
@@ -39,9 +52,44 @@ def _trim_large_fields(value: Any, max_list_items: int = 20, max_dict_items: int
     return value
 
 
+def _slim_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    """Remove fields not needed by Claude for assumption generation.
+
+    Strips stockPriceHistory (chart data only), periodReturns and riskMetrics
+    (not used in DCF/WACC calculations), and trims businessSummary to 600 chars
+    (enough to identify the company). Also collapses the yieldCurve to 4 key
+    tenors — Claude only uses the 10yr for the risk-free rate.
+
+    Combined with the max_chars cap, this saves ~1,500–2,000 input tokens per
+    standard-mode request without losing any data Claude actually references.
+    """
+    EXCLUDE_KEYS = {
+        "stockPriceHistory",  # Chart data — Claude never references this
+        "periodReturns",      # Historical return performance — not used in assumption gen
+        "riskMetrics",        # Sharpe/Sortino/Treynor — not used in DCF or WACC
+    }
+    slimmed = {k: v for k, v in summary.items() if k not in EXCLUDE_KEYS}
+
+    # Trim businessSummary — 600 chars is enough to identify the business; 1500 is wasteful
+    if isinstance(slimmed.get("businessSummary"), str):
+        slimmed["businessSummary"] = slimmed["businessSummary"][:600]
+
+    # Keep only the key yield curve tenors; Claude uses 10yr for risk-free rate
+    if isinstance(slimmed.get("yieldCurve"), dict):
+        yc = slimmed["yieldCurve"]
+        slimmed["yieldCurve"] = {
+            "2yr": yc.get("2yr"),
+            "5yr": yc.get("5yr"),
+            "10yr": yc.get("10yr"),
+            "30yr": yc.get("30yr"),
+        }
+
+    return slimmed
+
+
 def _summary_json(summary: dict[str, Any], max_chars: int) -> str:
     """Serialize and cap financial summary size for Anthropic token limits."""
-    compact_summary = _trim_large_fields(summary)
+    compact_summary = _trim_large_fields(_slim_summary(summary))
     serialized = json.dumps(compact_summary, indent=2, default=str)
     if len(serialized) <= max_chars:
         return serialized
@@ -119,7 +167,7 @@ class AnthropicAdapter:
         )
 
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=MODEL_SELF_REVIEW,
             max_tokens=4096,
             system=(
                 "You are reviewing submitted equity valuation assumptions for mathematical consistency. "
@@ -161,10 +209,11 @@ class AnthropicAdapter:
     ) -> dict[str, Any]:
         def _call() -> dict[str, Any]:
             client = anthropic.Anthropic(api_key=api_key)
-            summary_json = _summary_json(summary, max_chars=18000)
+            # Reduced from 18000 → 12000 chars (~3000 tokens saved per request)
+            summary_json = _summary_json(summary, max_chars=12000)
 
             if on_step:
-                on_step("Sending financial data to Claude...")
+                on_step("Sending financial data to Claude (Haiku)...")
 
             messages: list[dict[str, Any]] = [{
                 "role": "user",
@@ -173,7 +222,7 @@ class AnthropicAdapter:
 
             try:
                 response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model=MODEL_STANDARD,  # Haiku: high rate limits, much cheaper than Sonnet
                     max_tokens=3000,
                     system=SYSTEM_PROMPT,
                     messages=messages,
@@ -185,6 +234,10 @@ class AnthropicAdapter:
 
             input_tokens = getattr(response.usage, "input_tokens", 0) if getattr(response, "usage", None) else 0
             output_tokens = getattr(response.usage, "output_tokens", 0) if getattr(response, "usage", None) else 0
+            logger.info(
+                "[ANTHROPIC STANDARD] ticker=%s model=%s input_tokens=%d output_tokens=%d",
+                ticker, MODEL_STANDARD, input_tokens, output_tokens,
+            )
 
             for block in response.content:
                 if block.type == "tool_use" and block.name == "set_valuation_assumptions":
@@ -255,7 +308,7 @@ class AnthropicAdapter:
 
                 try:
                     response = client.messages.create(
-                        model="claude-sonnet-4-20250514",
+                        model=MODEL_DEEP_RESEARCH,  # Sonnet: kept for deep research multi-turn web reasoning
                         max_tokens=5000,
                         system=full_system,
                         messages=messages,
@@ -274,6 +327,10 @@ class AnthropicAdapter:
                         if on_step:
                             on_step("Assumptions set with web-sourced citations")
                         initial = dict(block.input)
+                        logger.info(
+                            "[ANTHROPIC DEEP_RESEARCH] ticker=%s model=%s cum_input_tokens=%d cum_output_tokens=%d turns=%d",
+                            ticker, MODEL_DEEP_RESEARCH, cum_input_tokens, cum_output_tokens, turn + 1,
+                        )
                         if historical_ratios:
                             messages.append({"role": "assistant", "content": _assistant_text_only(response.content)})
                             reviewed = self._sync_self_review(client, full_system, messages, initial, historical_ratios, [web_search_tool], on_step)
