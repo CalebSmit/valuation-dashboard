@@ -1,4 +1,4 @@
-"""Pipeline execution endpoint — runs py main.py and streams output via SSE."""
+"""Pipeline execution endpoint — fetches financial data via yfinance + FRED and streams progress via SSE."""
 from __future__ import annotations
 
 import json

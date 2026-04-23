@@ -27,9 +27,7 @@ RAW_DATA_PATH = _data_dir / "raw_data.xlsx"
 # Cache lives alongside raw_data so it's also on the persistent volume in production.
 CACHE_DIR = _data_dir / "cache"
 
-FINANCIAL_TOOL_EXE_PATH = PROJECT_DIR / "financial_tool.exe"
-MODEL_PATH = PROJECT_DIR / "Smit Financial Model.xlsm"
-PACKAGE_MODE = getattr(sys, "frozen", False)
+# Legacy desktop-app paths removed — pipeline is now self-contained (yfinance + FRED).
 
 
 def _ensure_cache_dir() -> Path:

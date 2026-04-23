@@ -1,8 +1,6 @@
 """Financial summary and forecast preset endpoints."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -18,7 +16,7 @@ async def get_financial_summary() -> dict[str, object]:
     if not reader.get_sheet_names():
         raise HTTPException(
             status_code=404,
-            detail="raw_data.xlsx not found. Run 'py main.py' first.",
+            detail="raw_data.xlsx not found. Enter a ticker and click Run to fetch data.",
         )
 
     summary = extract_financial_summary(reader)
@@ -34,16 +32,11 @@ async def get_forecast_presets() -> dict[str, Any]:
     if not reader.get_sheet_names():
         raise HTTPException(
             status_code=404,
-            detail="raw_data.xlsx not found. Run 'py main.py' first.",
+            detail="raw_data.xlsx not found. Enter a ticker and click Run to fetch data.",
         )
 
-    # Add project root to sys.path so we can import add_forecast_statements
-    from config import PROJECT_DIR
-    if str(PROJECT_DIR) not in sys.path:
-        sys.path.insert(0, str(PROJECT_DIR))
-
     try:
-        from add_forecast_statements import compute_preset_assumptions, extract_base_year
+        from services.forecast_presets import compute_preset_assumptions, extract_base_year
 
         income_df = reader.get_sheet_as_df("Raw_Income_Statement")
         balance_df = reader.get_sheet_as_df("Raw_Balance_Sheet")

@@ -109,10 +109,23 @@ async def analyze_ticker(ticker: str, request: AnalyzeRequest):
 
     resolved_api_key = (request.api_key or "").strip() or PROVIDER_API_KEYS.get(request.provider, "")
 
+    # Prefer cache-first behavior for same-day reruns. If fresh cache is available,
+    # serve it even without an API key to support fast, deterministic re-analysis.
+    cached_assumptions = _load_cached(ticker, request.provider, request.deep_research)
+    if cached_assumptions:
+        cached_assumptions = _patch_forecast(deepcopy(cached_assumptions))
+
+    # Validate API key before checking raw data (cache bypass requires key).
+    if not cached_assumptions and not resolved_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No API key available for provider '{request.provider}'. Add a key in Settings or configure it on the backend.",
+        )
+
     if not reader.get_sheet_names():
         raise HTTPException(
             status_code=404,
-            detail="raw_data.xlsx not found. Run 'py main.py' first.",
+            detail="raw_data.xlsx not found. Enter a ticker and click Run to fetch data.",
         )
 
     # Fix 7: Prevent analyze while pipeline is running
@@ -120,18 +133,6 @@ async def analyze_ticker(ticker: str, request: AnalyzeRequest):
         raise HTTPException(
             status_code=409,
             detail="Pipeline is currently running. Wait for it to complete before analyzing.",
-        )
-
-    # Prefer cache-first behavior for same-day reruns. If fresh cache is available,
-    # serve it even without an API key to support fast, deterministic re-analysis.
-    cached_assumptions = _load_cached(ticker, request.provider, request.deep_research)
-    if cached_assumptions:
-        cached_assumptions = _patch_forecast(deepcopy(cached_assumptions))
-
-    if not cached_assumptions and not resolved_api_key:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No API key available for provider '{request.provider}'. Add a key in Settings or configure it on the backend.",
         )
 
     async def event_stream():
@@ -148,11 +149,7 @@ async def analyze_ticker(ticker: str, request: AnalyzeRequest):
         # Step 3: Compute historical ratios for self-review
         historical_ratios: dict | None = None
         try:
-            from config import PROJECT_DIR
-            import sys as _sys
-            if str(PROJECT_DIR) not in _sys.path:
-                _sys.path.insert(0, str(PROJECT_DIR))
-            from add_forecast_statements import compute_preset_assumptions, extract_base_year
+            from services.forecast_presets import compute_preset_assumptions, extract_base_year
             _income = reader.get_sheet_as_df("Raw_Income_Statement")
             _balance = reader.get_sheet_as_df("Raw_Balance_Sheet")
             _cashflow = reader.get_sheet_as_df("Raw_Cash_Flow")

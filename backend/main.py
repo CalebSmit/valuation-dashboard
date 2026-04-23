@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
         print("=" * 70)
         print("[WARNING] raw_data.xlsx not found at:")
         print(f"  {RAW_DATA_PATH}")
-        print("  Run 'py main.py' first to generate financial data.")
+        print("  Enter a ticker in the dashboard and click Run to fetch data.")
         print("=" * 70)
     else:
         print(f"[OK] raw_data.xlsx found at {RAW_DATA_PATH}")

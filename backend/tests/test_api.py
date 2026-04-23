@@ -49,7 +49,7 @@ def test_analyze_missing_api_key_rejected(monkeypatch) -> None:
 
 
 def test_pipeline_streams_pipeline_error(monkeypatch) -> None:
-    async def failing_run_pipeline(_: str):
+    async def failing_run_pipeline(_: str, fred_api_key: str | None = None):
         raise PipelineError("simulated pipeline failure")
         yield "unreachable"
 

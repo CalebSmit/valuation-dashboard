@@ -18,7 +18,7 @@ async def list_sheets() -> dict[str, object]:
     if not names:
         raise HTTPException(
             status_code=404,
-            detail="raw_data.xlsx not found. Run 'py main.py' first.",
+            detail="raw_data.xlsx not found. Enter a ticker and click Run to fetch data.",
         )
     return {
         "sheets": names,
