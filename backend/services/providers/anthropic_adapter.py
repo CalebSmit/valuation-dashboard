@@ -51,20 +51,11 @@ def _summary_json(summary: dict[str, Any], max_chars: int) -> str:
 
 def _format_rate_limit_error(error: Exception) -> str:
     """Return a user-friendly Anthropic rate limit message."""
-    raw = str(error)
-    request_id = ""
-    marker = "'request_id':"
-    if marker in raw:
-        request_id = raw.split(marker, 1)[1].split("'", 2)[1]
-
-    base = (
-        "Anthropic rate limit reached (429). "
-        "This run exceeded organization input-tokens-per-minute capacity. "
-        "Wait about 60-90 seconds and retry, or switch provider to Perplexity/Gemini."
+    return (
+        "Too Many Requests. Rate limited. "
+        "Anthropic's API is temporarily over capacity. "
+        "Wait 60-90 seconds and try again."
     )
-    if request_id:
-        return f"{base} Request ID: {request_id}"
-    return base
 
 
 def _assistant_text_only(content_blocks: list[Any]) -> str:

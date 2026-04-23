@@ -15,12 +15,33 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, date
 from typing import Any
 
+import time
+
 import numpy as np
 import pandas as pd
 import requests
 import yfinance as yf
 
 from config import RAW_DATA_PATH
+
+_YF_DELAY = 0.4   # seconds between yfinance calls — avoids Yahoo 429s
+
+
+def _yf_call_with_retry(fn, retries: int = 3, delay: float = 3.0):
+    """Call a yfinance getter with retry on exception (handles transient 429s)."""
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        try:
+            result = fn()
+            time.sleep(_YF_DELAY)   # brief pause after every yfinance call
+            return result
+        except Exception as exc:
+            last_exc = exc
+            backoff = delay * (2 ** attempt)
+            time.sleep(backoff)
+    raise last_exc  # type: ignore[misc]
+
+
 from services.ticker_validation import is_valid_ticker, normalize_ticker
 
 PIPELINE_TIMEOUT = 600  # seconds — kept for API compat
@@ -118,7 +139,7 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
     """Synchronous pipeline — called from a thread so the async generator stays non-blocking."""
     progress_cb(f"[1/10] Fetching company info for {ticker}...")
     t = yf.Ticker(ticker)
-    info = t.info or {}
+    info = _yf_call_with_retry(lambda: t.info or {})
 
     # ── About sheet ────────────────────────────────────────────────────────────
     about_data = {
@@ -181,14 +202,14 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
         ]
         return df
 
-    income_df    = _stmt_to_df(t.financials)
-    balance_df   = _stmt_to_df(t.balance_sheet)
-    cashflow_df  = _stmt_to_df(t.cashflow)
+    income_df    = _stmt_to_df(_yf_call_with_retry(lambda: t.financials))
+    balance_df   = _stmt_to_df(_yf_call_with_retry(lambda: t.balance_sheet))
+    cashflow_df  = _stmt_to_df(_yf_call_with_retry(lambda: t.cashflow))
 
     # Quarterly statements
-    q_income_df   = _stmt_to_df(t.quarterly_financials)
-    q_balance_df  = _stmt_to_df(t.quarterly_balance_sheet)
-    q_cashflow_df = _stmt_to_df(t.quarterly_cashflow)
+    q_income_df   = _stmt_to_df(_yf_call_with_retry(lambda: t.quarterly_financials))
+    q_balance_df  = _stmt_to_df(_yf_call_with_retry(lambda: t.quarterly_balance_sheet))
+    q_cashflow_df = _stmt_to_df(_yf_call_with_retry(lambda: t.quarterly_cashflow))
 
     # ── Shares Outstanding ─────────────────────────────────────────────────────
     shares_val = _safe(info.get("sharesOutstanding"))
@@ -209,13 +230,13 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
         df["period"] = df["period"].astype(str)
         return df
 
-    earnings_est_df  = _reset_period_index(t.earnings_estimate)
-    revenue_est_df   = _reset_period_index(t.revenue_estimate)
-    eps_trend_df     = _reset_period_index(t.eps_trend)
+    earnings_est_df  = _reset_period_index(_yf_call_with_retry(lambda: t.earnings_estimate))
+    revenue_est_df   = _reset_period_index(_yf_call_with_retry(lambda: t.revenue_estimate))
+    eps_trend_df     = _reset_period_index(_yf_call_with_retry(lambda: t.eps_trend))
 
     # Growth forecasts (stock vs index)
     try:
-        gf = t.growth_estimates
+        gf = _yf_call_with_retry(lambda: t.growth_estimates)
         if gf is not None and not gf.empty:
             gf = gf.reset_index()
             gf = gf.rename(columns={gf.columns[0]: "period"})
@@ -238,7 +259,7 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
 
     # Earnings surprise history
     try:
-        eh = t.earnings_history
+        eh = _yf_call_with_retry(lambda: t.earnings_history)
         if eh is not None and not eh.empty:
             eh = eh.copy().reset_index()
             # Rename index col to 'quarter'
@@ -253,7 +274,7 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
 
     # Analyst ratings (recommendations summary)
     try:
-        rs = t.recommendations_summary
+        rs = _yf_call_with_retry(lambda: t.recommendations_summary)
         if rs is not None and not rs.empty:
             # Pivot to a Metric/Value format for financial_summarizer compatibility
             latest = rs.iloc[0] if len(rs) > 0 else None
@@ -290,7 +311,7 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
     # ── Dividend history ───────────────────────────────────────────────────────
     progress_cb("[5/10] Fetching dividend history...")
     try:
-        divs = t.dividends
+        divs = _yf_call_with_retry(lambda: t.dividends)
         if divs is not None and not divs.empty:
             div_df = divs.reset_index().copy()
             div_df.columns = ["Date", "Dividend"]
@@ -349,7 +370,7 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
     # ── Stock price history ────────────────────────────────────────────────────
     progress_cb("[6/10] Fetching price history & computing beta...")
     try:
-        history_raw = t.history(period="5y", interval="1d", auto_adjust=True)
+        history_raw = _yf_call_with_retry(lambda: t.history(period="5y", interval="1d", auto_adjust=True))
         if not history_raw.empty:
             history_raw = history_raw.reset_index()
             history_raw["Date"] = pd.to_datetime(history_raw["Date"]).dt.strftime("%Y-%m-%d")
@@ -363,8 +384,8 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
 
     # ── Beta regression (5yr weekly vs SPY) ───────────────────────────────────
     try:
-        spy_hist = yf.download("SPY", period="5y", interval="1wk", auto_adjust=True, progress=False)["Close"]
-        ticker_hist = yf.download(ticker, period="5y", interval="1wk", auto_adjust=True, progress=False)["Close"]
+        spy_hist = _yf_call_with_retry(lambda: yf.download("SPY", period="5y", interval="1wk", auto_adjust=True, progress=False)["Close"])
+        ticker_hist = _yf_call_with_retry(lambda: yf.download(ticker, period="5y", interval="1wk", auto_adjust=True, progress=False)["Close"])
 
         # Flatten MultiIndex if present (yfinance 0.2.x sometimes returns one)
         if hasattr(spy_hist, "columns"):
@@ -427,7 +448,7 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
     progress_cb("[8/10] Fetching options & ownership data...")
     # Options implied volatility summary
     try:
-        opts = t.option_chain(t.options[0]) if t.options else None
+        opts = _yf_call_with_retry(lambda: t.option_chain(t.options[0]) if t.options else None)
         if opts:
             iv_call = opts.calls["impliedVolatility"].mean() if "impliedVolatility" in opts.calls.columns else None
             iv_put  = opts.puts["impliedVolatility"].mean()  if "impliedVolatility" in opts.puts.columns  else None
@@ -442,21 +463,21 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
 
     # Institutional holdings
     try:
-        inst = t.institutional_holders
+        inst = _yf_call_with_retry(lambda: t.institutional_holders)
         institutional_df = inst if inst is not None and not inst.empty else pd.DataFrame()
     except Exception:
         institutional_df = pd.DataFrame()
 
     # Insider transactions
     try:
-        insiders = t.insider_transactions
+        insiders = _yf_call_with_retry(lambda: t.insider_transactions)
         insider_df = insiders if insiders is not None and not insiders.empty else pd.DataFrame()
     except Exception:
         insider_df = pd.DataFrame()
 
     # News
     try:
-        news = t.news
+        news = _yf_call_with_retry(lambda: t.news)
         if news:
             news_rows = [{"Title": n.get("title",""), "Publisher": n.get("publisher",""), "Link": n.get("link","")} for n in news[:20]]
             news_df = pd.DataFrame(news_rows)
