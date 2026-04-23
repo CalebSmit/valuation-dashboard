@@ -27,13 +27,18 @@ function formatPct(val: number): string {
 function EditableCell({
   value, label, format, onSave,
 }: {
-  value: number
+  value: number | null | undefined
   label: string
   format: 'percent' | 'number' | 'days'
   onSave: (v: number) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [inputVal, setInputVal] = useState('')
+
+  // Guard: if the preset value is missing, show N/A and disable editing
+  if (value == null || !isFinite(value)) {
+    return <span className="px-1 py-0.5 text-xs font-mono clr-muted">N/A</span>
+  }
 
   const displayVal = format === 'percent'
     ? `${(value * 100).toFixed(2)}%`
