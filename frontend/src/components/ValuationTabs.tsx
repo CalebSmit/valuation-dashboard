@@ -212,6 +212,7 @@ export function ValuationTabs({
             onDataOverride={onDataOverride}
             dcfConfig={dcfConfig}
             onDCFConfigChange={onDCFConfigChange}
+            fieldCorrections={run.fieldCorrections}
           />
         )}
         {activeTab === 'DDM' && (

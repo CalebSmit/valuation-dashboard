@@ -8,6 +8,7 @@ import { CollapsibleCard } from './CollapsibleCard.tsx'
 import { AssumptionField } from './AssumptionField.tsx'
 import { DataField } from './DataField.tsx'
 import { DeltaIndicator } from './DeltaIndicator.tsx'
+import { WACCBuildupCard } from './WACCBuildupCard.tsx'
 import { formatCurrency, formatPercent, formatMillions } from '../utils/formatters.ts'
 import { BOUNDS } from '../utils/constants.ts'
 import { computeROIC } from '../utils/financialMath.ts'
@@ -22,13 +23,16 @@ interface DCFTabProps {
   onDataOverride: (field: keyof DataOverrides, value: number) => void
   dcfConfig: DCFConfig
   onDCFConfigChange: (partial: Partial<DCFConfig>) => void
+  fieldCorrections?: Record<string, string>
 }
 
 export function DCFTab({
   dcfOutput, assumptions, financialData, originalData, previousPrice,
   onOverride, onDataOverride,
   dcfConfig, onDCFConfigChange,
+  fieldCorrections = {},
 }: DCFTabProps) {
+  const cx = fieldCorrections
   if (!dcfOutput) {
     return <div className="p-4 font-mono text-sm clr-muted">No DCF data available</div>
   }
@@ -45,6 +49,13 @@ export function DCFTab({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* WACC Build-Up summary — prominent traceability card */}
+      <WACCBuildupCard
+        wacc={waccA}
+        computedWACC={dcfOutput.wacc}
+        costOfEquity={dcfOutput.costOfEquity}
+        afterTaxCostOfDebt={dcfOutput.afterTaxCostOfDebt}
+      />
       {/* Two-column grid of collapsible cards */}
       <div className="dcf-grid">
         {/* DCF Valuation — top left, open by default */}
@@ -125,14 +136,14 @@ export function DCFTab({
         {/* WACC Build-Up — closed by default */}
         <CollapsibleCard title="WACC Build-Up">
           <div className="flex flex-col">
-            <AssumptionField label="Risk-Free Rate" assumption={waccA.risk_free_rate} format="percent" onOverride={v => onOverride('wacc.risk_free_rate', v)} min={BOUNDS.riskFreeRate.min} max={BOUNDS.riskFreeRate.max} />
-            <AssumptionField label="Equity Risk Premium" assumption={waccA.equity_risk_premium} format="percent" onOverride={v => onOverride('wacc.equity_risk_premium', v)} min={BOUNDS.equityRiskPremium.min} max={BOUNDS.equityRiskPremium.max} />
-            <AssumptionField label="Beta" assumption={waccA.beta} format="number" onOverride={v => onOverride('wacc.beta', v)} min={BOUNDS.beta.min} max={BOUNDS.beta.max} />
-            <AssumptionField label="Size Premium" assumption={waccA.size_premium} format="percent" onOverride={v => onOverride('wacc.size_premium', v)} min={BOUNDS.sizePremium.min} max={BOUNDS.sizePremium.max} />
-            <AssumptionField label="Cost of Debt" assumption={waccA.cost_of_debt} format="percent" onOverride={v => onOverride('wacc.cost_of_debt', v)} min={BOUNDS.costOfDebt.min} max={BOUNDS.costOfDebt.max} />
-            <AssumptionField label="Tax Rate" assumption={waccA.tax_rate} format="percent" onOverride={v => onOverride('wacc.tax_rate', v)} min={BOUNDS.taxRate.min} max={BOUNDS.taxRate.max} />
-            <AssumptionField label="Debt Weight" assumption={waccA.debt_weight} format="percent" onOverride={v => onOverride('wacc.debt_weight', v)} min={BOUNDS.debtWeight.min} max={BOUNDS.debtWeight.max} />
-            <AssumptionField label="Equity Weight" assumption={waccA.equity_weight} format="percent" onOverride={v => onOverride('wacc.equity_weight', v)} min={BOUNDS.equityWeight.min} max={BOUNDS.equityWeight.max} />
+            <AssumptionField label="Risk-Free Rate" assumption={waccA.risk_free_rate} format="percent" onOverride={v => onOverride('wacc.risk_free_rate', v)} min={BOUNDS.riskFreeRate.min} max={BOUNDS.riskFreeRate.max} correctionMessage={cx['wacc.risk_free_rate']} />
+            <AssumptionField label="Equity Risk Premium" assumption={waccA.equity_risk_premium} format="percent" onOverride={v => onOverride('wacc.equity_risk_premium', v)} min={BOUNDS.equityRiskPremium.min} max={BOUNDS.equityRiskPremium.max} correctionMessage={cx['wacc.equity_risk_premium']} />
+            <AssumptionField label="Beta" assumption={waccA.beta} format="number" onOverride={v => onOverride('wacc.beta', v)} min={BOUNDS.beta.min} max={BOUNDS.beta.max} correctionMessage={cx['wacc.beta']} rangeRule="beta" />
+            <AssumptionField label="Size Premium" assumption={waccA.size_premium} format="percent" onOverride={v => onOverride('wacc.size_premium', v)} min={BOUNDS.sizePremium.min} max={BOUNDS.sizePremium.max} correctionMessage={cx['wacc.size_premium']} />
+            <AssumptionField label="Cost of Debt" assumption={waccA.cost_of_debt} format="percent" onOverride={v => onOverride('wacc.cost_of_debt', v)} min={BOUNDS.costOfDebt.min} max={BOUNDS.costOfDebt.max} correctionMessage={cx['wacc.cost_of_debt']} />
+            <AssumptionField label="Tax Rate" assumption={waccA.tax_rate} format="percent" onOverride={v => onOverride('wacc.tax_rate', v)} min={BOUNDS.taxRate.min} max={BOUNDS.taxRate.max} correctionMessage={cx['wacc.tax_rate']} />
+            <AssumptionField label="Debt Weight" assumption={waccA.debt_weight} format="percent" onOverride={v => onOverride('wacc.debt_weight', v)} min={BOUNDS.debtWeight.min} max={BOUNDS.debtWeight.max} correctionMessage={cx['wacc.debt_weight']} />
+            <AssumptionField label="Equity Weight" assumption={waccA.equity_weight} format="percent" onOverride={v => onOverride('wacc.equity_weight', v)} min={BOUNDS.equityWeight.min} max={BOUNDS.equityWeight.max} correctionMessage={cx['wacc.equity_weight']} />
           </div>
           <div className="mt-3 pt-3 flex justify-between row-t">
             <span className="font-mono text-xs font-semibold clr-text">WACC</span>
@@ -184,12 +195,12 @@ export function DCFTab({
               ))}
             </div>
           </div>
-          <AssumptionField label="EBITDA Margin" assumption={dcfA.ebitda_margin} format="percent" onOverride={v => onOverride('dcf.ebitda_margin', v)} min={BOUNDS.ebitdaMargin.min} max={BOUNDS.ebitdaMargin.max} />
-          <AssumptionField label="CapEx % Rev" assumption={dcfA.capex_pct_revenue} format="percent" onOverride={v => onOverride('dcf.capex_pct_revenue', v)} min={BOUNDS.capexPctRevenue.min} max={BOUNDS.capexPctRevenue.max} />
-          <AssumptionField label="NWC % Rev" assumption={dcfA.nwc_pct_revenue} format="percent" onOverride={v => onOverride('dcf.nwc_pct_revenue', v)} />
-          <AssumptionField label="DCF Tax Rate" assumption={dcfA.tax_rate} format="percent" onOverride={v => onOverride('dcf.tax_rate', v)} min={BOUNDS.taxRate.min} max={BOUNDS.taxRate.max} />
-          <AssumptionField label="Terminal Growth" assumption={dcfA.terminal_growth_rate} format="percent" onOverride={v => onOverride('dcf.terminal_growth_rate', v)} min={BOUNDS.terminalGrowthRate.min} max={BOUNDS.terminalGrowthRate.max} />
-          <AssumptionField label="Exit Multiple" assumption={dcfA.exit_multiple} format="multiple" onOverride={v => onOverride('dcf.exit_multiple', v)} min={BOUNDS.exitMultiple.min} max={BOUNDS.exitMultiple.max} />
+          <AssumptionField label="EBITDA Margin" assumption={dcfA.ebitda_margin} format="percent" onOverride={v => onOverride('dcf.ebitda_margin', v)} min={BOUNDS.ebitdaMargin.min} max={BOUNDS.ebitdaMargin.max} correctionMessage={cx['dcf.ebitda_margin']} />
+          <AssumptionField label="CapEx % Rev" assumption={dcfA.capex_pct_revenue} format="percent" onOverride={v => onOverride('dcf.capex_pct_revenue', v)} min={BOUNDS.capexPctRevenue.min} max={BOUNDS.capexPctRevenue.max} correctionMessage={cx['dcf.capex_pct_revenue']} />
+          <AssumptionField label="NWC % Rev" assumption={dcfA.nwc_pct_revenue} format="percent" onOverride={v => onOverride('dcf.nwc_pct_revenue', v)} correctionMessage={cx['dcf.nwc_pct_revenue']} />
+          <AssumptionField label="DCF Tax Rate" assumption={dcfA.tax_rate} format="percent" onOverride={v => onOverride('dcf.tax_rate', v)} min={BOUNDS.taxRate.min} max={BOUNDS.taxRate.max} correctionMessage={cx['dcf.tax_rate']} />
+          <AssumptionField label="Terminal Growth" assumption={dcfA.terminal_growth_rate} format="percent" onOverride={v => onOverride('dcf.terminal_growth_rate', v)} min={BOUNDS.terminalGrowthRate.min} max={BOUNDS.terminalGrowthRate.max} correctionMessage={cx['dcf.terminal_growth_rate']} rangeRule="terminalGrowthRate" />
+          <AssumptionField label="Exit Multiple" assumption={dcfA.exit_multiple} format="multiple" onOverride={v => onOverride('dcf.exit_multiple', v)} min={BOUNDS.exitMultiple.min} max={BOUNDS.exitMultiple.max} correctionMessage={cx['dcf.exit_multiple']} />
         </CollapsibleCard>
 
         {/* Model Inputs — closed by default */}

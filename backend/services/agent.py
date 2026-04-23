@@ -99,7 +99,48 @@ CONFIDENCE TAGGING:
 CRITICAL: All rates must be in DECIMAL form (0.08 means 8%, not 8).
 CRITICAL: The provided FRED yields, dividend yields, margins, and growth rates are ALREADY in decimal form
 (e.g., riskFreeRate10yr: 0.0406 means 4.06%). Do NOT divide by 100 again.
-CRITICAL: Every assumption MUST have a specific source citation in the source field.
+
+CRITICAL — SOURCE CITATION REQUIREMENTS (non-negotiable):
+Every single assumption value you produce (every SourcedAssumption object in dcf, wacc, ddm,
+scenarios, and forecast sections) MUST include a `source` string that is SPECIFIC, REAL, and
+VERIFIABLE. Treat the `source` field as a required field on every assumption object — not optional.
+
+Examples of ACCEPTABLE source strings (specific, real, verifiable):
+  - "Federal Reserve H.15 release, April 2026 (10Y Treasury)"
+  - "Damodaran 2024 implied ERP estimate"
+  - "Bloomberg consensus estimate, {ticker} FY2026 revenue"
+  - "{ticker} 10-K FY2024 Item 7 MD&A effective tax rate"
+  - "Q3 2025 earnings call transcript — management guidance on EBITDA margin"
+  - "S&P Capital IQ peer median EV/EBITDA as of 2026-04"
+  - "Provided data: capitalStructure.debtToCapitalMarket"
+  - "Provided data: regressionBeta from financial_summary"
+
+Examples of FORBIDDEN source strings — you MUST NOT use any of these or similar:
+  - "industry standard"
+  - "common assumption"
+  - "typical value"
+  - "assumed"
+  - "standard assumption"
+  - "analyst estimate" (with no name/firm)
+  - "best guess"
+  - "default"
+  - "reasonable estimate"
+  - "conservative assumption"
+  - Empty strings or placeholder text
+
+If you cannot find a real, specific source for a value, you have two acceptable options:
+  (1) OMIT the field entirely if the schema allows (e.g., nullable DDM fields).
+  (2) Use EXACTLY this sentinel string for the source:
+      "UNVERIFIED — needs manual review"
+      Only use this as a last resort; flag the field with confidence: "low" and explain in the
+      rationale what would be needed to verify it.
+
+Before you call set_valuation_assumptions, scan every `source` field you plan to submit. If any
+source is vague, generic, or matches a FORBIDDEN example above, replace it with a specific
+citation or the "UNVERIFIED — needs manual review" sentinel. Do not submit vague sources.
+
+CRITICAL: Every assumption MUST have a specific, real source citation in the `source` field — or
+the explicit "UNVERIFIED — needs manual review" sentinel. Vague placeholders are rejected.
 
 11. 3-STATEMENT FORECAST (Required)
     You MUST provide a 5-year revenue forecast, EBIT margins, and EBITDA margins in the forecast section.
@@ -402,7 +443,20 @@ ASSUMPTIONS_TOOL = {
                 "required": ["value", "source"],
                 "properties": {
                     "value": {"type": "number"},
-                    "source": {"type": "string"},
+                    "source": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": (
+                            "REQUIRED. A specific, real, verifiable citation for the value — e.g. "
+                            "'Damodaran 2024 implied ERP', 'Federal Reserve H.15 release, April 2026', "
+                            "'Bloomberg consensus estimate', 'Q3 2025 earnings call transcript', "
+                            "'{ticker} 10-K FY2024'. Vague placeholders like 'industry standard', "
+                            "'common assumption', 'typical value', 'assumed', 'default', 'reasonable "
+                            "estimate', or empty strings are FORBIDDEN. If you cannot find a specific "
+                            "real source, use EXACTLY 'UNVERIFIED — needs manual review' and set "
+                            "confidence to 'low'."
+                        ),
+                    },
                     "confidence": {"type": "string", "enum": ["high", "medium", "low"], "default": "medium"},
                     "rationale": {"type": "string", "default": ""},
                 }

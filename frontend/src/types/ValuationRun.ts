@@ -48,4 +48,7 @@ export interface ValuationRun {
 
   agentLog: AgentLogEntry[]
   error: string | null
+
+  /** Per-field auto-correction messages from the assumption validator (path → message). */
+  fieldCorrections?: Record<string, string>
 }

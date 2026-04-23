@@ -62,6 +62,7 @@ export function parseAIRecommendedConfig(raw: Record<string, unknown> | undefine
 export interface AgentResult {
   assumptions: Assumptions
   aiConfig: AIRecommendedConfig | null
+  fieldCorrections: Record<string, string>
 }
 
 function normalizeForecast(rawForecast: unknown): { forecast: Assumptions['forecast']; missingFields: string[] } {
@@ -251,7 +252,7 @@ export async function runAgent(
   }
 
   // Validate and correct Claude's output before engines use it
-  const { corrected, warnings } = validateAssumptions(assumptions)
+  const { corrected, warnings, fieldCorrections } = validateAssumptions(assumptions)
   if (warnings.length > 0) {
     onStep({
       status: 'running',
@@ -263,5 +264,6 @@ export async function runAgent(
   return {
     assumptions: corrected,
     aiConfig: parseAIRecommendedConfig(rawValuationConfig),
+    fieldCorrections,
   }
 }

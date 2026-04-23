@@ -46,6 +46,7 @@ function createEmptyRun(ticker: string): ValuationRun {
     forecastBaseYear: null,
     agentLog: [],
     error: null,
+    fieldCorrections: {},
   }
 }
 
@@ -126,6 +127,7 @@ export function useValuationRun() {
       const agentResult = await runAgent(ticker, apiKey, addLogEntry, provider, deepResearch)
       const assumptions: Assumptions = agentResult.assumptions
       const aiRecommendedConfig = agentResult.aiConfig
+      const fieldCorrections = agentResult.fieldCorrections
 
       // Step 2b: Fetch peer data based on AI's selected peers
       const selectedPeers = assumptions.comps?.selected_peers ?? []
@@ -197,6 +199,7 @@ export function useValuationRun() {
         forecastBaseYear,
         status: 'complete',
         agentLog: [], // Will be set by setRun
+        fieldCorrections,
       }
 
       setRun(prev => ({
@@ -248,7 +251,7 @@ export function useValuationRun() {
       const data = mergedData ?? prev.financialData
       if (!data) return prev
       const config = valuationConfig ?? prev.valuationConfig ?? DEFAULT_VALUATION_CONFIG
-      const { corrected } = validateAssumptions(mergedAssumptions)
+      const { corrected, fieldCorrections } = validateAssumptions(mergedAssumptions)
       const previousPrices = {
         dcf: prev.dcfOutput?.impliedPrice ?? null,
         ddm: prev.ddmOutput?.impliedPrice ?? null,
@@ -271,6 +274,7 @@ export function useValuationRun() {
         previousPrices,
         valuationConfig: config,
         blendedOutput,
+        fieldCorrections,
       }
 
       updateRun(prev.id, {
