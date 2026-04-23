@@ -4,8 +4,8 @@ export function EmptyState() {
       <div className="text-6xl mb-4 empty-icon">$</div>
       <h2 className="text-lg font-semibold mb-2 empty-title">No Valuations Yet</h2>
       <p className="text-sm max-w-md font-sans clr-muted">
-        Enter a stock ticker above and click ANALYZE to generate your first AI-powered valuation.
-        Make sure you've run the Python pipeline first (py main.py) to populate financial data.
+        Enter a stock ticker above and click Analyze. Financial data is fetched automatically
+        — no file uploads or setup required.
       </p>
     </div>
   )

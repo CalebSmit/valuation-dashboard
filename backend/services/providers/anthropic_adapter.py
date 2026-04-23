@@ -106,6 +106,14 @@ def _format_rate_limit_error(error: Exception) -> str:
     )
 
 
+def _format_auth_error(error: Exception) -> str:
+    """Return a user-friendly Anthropic authentication error message."""
+    return (
+        "Invalid API key for Anthropic. "
+        "Check that your ANTHROPIC_API_KEY is correct and active at console.anthropic.com."
+    )
+
+
 def _assistant_text_only(content_blocks: list[Any]) -> str:
     """Extract assistant text content and drop tool_use blocks for next-turn safety.
 
@@ -166,18 +174,23 @@ class AnthropicAdapter:
             f"{_build_self_review_message(initial, historical_ratios)}"
         )
 
-        response = client.messages.create(
-            model=MODEL_SELF_REVIEW,
-            max_tokens=4096,
-            system=(
-                "You are reviewing submitted equity valuation assumptions for mathematical consistency. "
-                "Check each criterion provided and call set_valuation_assumptions with the final values — "
-                "keep all values that pass unchanged, correct only those that fail."
-            ),
-            messages=[{"role": "user", "content": review_content}],
-            tools=[ASSUMPTIONS_TOOL],
-            tool_choice={"type": "any"},
-        )
+        try:
+            response = client.messages.create(
+                model=MODEL_SELF_REVIEW,
+                max_tokens=4096,
+                system=(
+                    "You are reviewing submitted equity valuation assumptions for mathematical consistency. "
+                    "Check each criterion provided and call set_valuation_assumptions with the final values — "
+                    "keep all values that pass unchanged, correct only those that fail."
+                ),
+                messages=[{"role": "user", "content": review_content}],
+                tools=[ASSUMPTIONS_TOOL],
+                tool_choice={"type": "any"},
+            )
+        except anthropic.AuthenticationError as e:
+            raise ValueError(_format_auth_error(e)) from e
+        except anthropic.RateLimitError as e:
+            raise ValueError(_format_rate_limit_error(e)) from e
 
         _REQUIRED = {"dcf", "wacc", "ddm", "comps", "scenarios", "forecast", "investment_thesis", "key_risks"}
 
@@ -315,6 +328,8 @@ class AnthropicAdapter:
                         tools=[web_search_tool, ASSUMPTIONS_TOOL],
                         tool_choice={"type": "any"},
                     )
+                except anthropic.AuthenticationError as e:
+                    raise ValueError(_format_auth_error(e)) from e
                 except anthropic.RateLimitError as e:
                     raise ValueError(_format_rate_limit_error(e)) from e
 

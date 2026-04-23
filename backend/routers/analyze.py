@@ -125,7 +125,7 @@ async def analyze_ticker(ticker: str, request: AnalyzeRequest):
     if not reader.get_sheet_names():
         raise HTTPException(
             status_code=404,
-            detail="raw_data.xlsx not found. Enter a ticker and click Run to fetch data.",
+            detail="raw_data.xlsx not found. The data pipeline needs to run first — enter a ticker and click Analyze to fetch data automatically.",
         )
 
     # Fix 7: Prevent analyze while pipeline is running

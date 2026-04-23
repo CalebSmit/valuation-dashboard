@@ -255,9 +255,9 @@ function App() {
                          'Computing valuations...'}
                       </p>
                       <p className="text-xs font-mono clr-muted">
-                        {run.status === 'pipeline' ? 'Fetching financial statements from APIs' :
-                         run.status === 'fetching' ? 'Parsing raw_data.xlsx' :
-                         run.status === 'researching' ? 'This may take 30-90 seconds' :
+                        {run.status === 'pipeline' ? 'Fetching financial statements from yfinance & FRED' :
+                         run.status === 'fetching' ? 'Loading financial data...' :
+                         run.status === 'researching' ? 'This may take 30–90 seconds' :
                          'Running DCF, DDM, and comps engines'}
                       </p>
                     </div>

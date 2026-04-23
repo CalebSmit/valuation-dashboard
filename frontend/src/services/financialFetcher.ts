@@ -23,6 +23,15 @@ export function classifyError(raw: string): string {
     return 'Backend is waking up — please wait 30 seconds and try again.'
   }
 
+  // raw_data.xlsx missing — pipeline needs to run first
+  if (
+    lower.includes('raw_data.xlsx not found') ||
+    lower.includes('enter a ticker and click run') ||
+    lower.includes('raw_data.xlsx')
+  ) {
+    return 'Data not found. Enter a ticker and click Analyze — financial data is fetched automatically.'
+  }
+
   // Ticker not found or delisted
   if (
     lower.includes('no data') ||
@@ -37,6 +46,13 @@ export function classifyError(raw: string): string {
   }
 
   // Anthropic API key errors
+  if (
+    lower.includes('invalid api key for anthropic') ||
+    lower.includes('check that your anthropic_api_key')
+  ) {
+    return 'Invalid Anthropic API key. Check that your key is correct and active at console.anthropic.com.'
+  }
+
   if (
     lower.includes('invalid api key') ||
     lower.includes('authentication') ||
