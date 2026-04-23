@@ -17,11 +17,20 @@ def _resolve_runtime_paths() -> tuple[Path, Path, Path, Path]:
 
 
 BACKEND_DIR, PROJECT_DIR, FRONTEND_DIST_DIR, DASHBOARD_DIR = _resolve_runtime_paths()
-RAW_DATA_PATH = PROJECT_DIR / "raw_data.xlsx"
-CACHE_DIR = BACKEND_DIR / "cache"
+
+# ── Data paths ─────────────────────────────────────────────────────────────────
+# DATA_DIR env var lets Docker / Fly.io redirect data to a persistent volume (/data).
+# Falls back to the project root for local development.
+_data_dir = Path(os.getenv("DATA_DIR", str(PROJECT_DIR)))
+RAW_DATA_PATH = _data_dir / "raw_data.xlsx"
+
+# Cache lives alongside raw_data so it's also on the persistent volume in production.
+CACHE_DIR = _data_dir / "cache"
+
 FINANCIAL_TOOL_EXE_PATH = PROJECT_DIR / "financial_tool.exe"
 MODEL_PATH = PROJECT_DIR / "Smit Financial Model.xlsm"
 PACKAGE_MODE = getattr(sys, "frozen", False)
+
 
 def _ensure_cache_dir() -> Path:
     preferred_dir = CACHE_DIR
@@ -38,6 +47,7 @@ def _ensure_cache_dir() -> Path:
 
 
 CACHE_DIR = _ensure_cache_dir()
+
 
 def _parse_origins(value: str | None) -> list[str]:
     if not value:

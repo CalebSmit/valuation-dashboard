@@ -9,7 +9,6 @@
  */
 import type {
   ForecastOutput,
-  ForecastStatements,
   ForecastValidation,
   PresetAssumptions,
   BaseYearData,
@@ -85,7 +84,7 @@ function mergeAssumptions(
   if (aiForecasts) {
     for (const override of aiAccountOverrides) {
       if (override.account in merged) {
-        ;(merged as Record<string, unknown>)[override.account] = override.new_value
+        ;(merged as unknown as Record<string, unknown>)[override.account] = override.new_value
       }
     }
   }
@@ -101,13 +100,13 @@ function mergeAssumptions(
       if (Array.isArray(current)) {
         const copy = [...current]
         copy[yearIdx] = val
-        ;(merged as Record<string, unknown>)[field] = copy
+        ;(merged as unknown as Record<string, unknown>)[field] = copy
       }
       continue
     }
 
     if (key in merged) {
-      ;(merged as Record<string, unknown>)[key] = val
+      ;(merged as unknown as Record<string, unknown>)[key] = val
     }
   }
 
@@ -123,9 +122,10 @@ export function computeForecast(
   if (baseYear.total_revenue <= 0) {
     return {
       statements: { incomeStatement: {}, balanceSheet: {}, cashFlow: {}, dcfInputs: {} },
-      mergedPresets: presets,
+      mergedPresets: presets as unknown as PresetAssumptions,
       aiForecasts,
       validation: { balanced: false, maxDiff: 0, issues: ['Base year revenue is zero or negative'] },
+      revenues: [],
     }
   }
 
@@ -236,7 +236,6 @@ export function computeForecast(
   let prevLtDebt = baseYear.long_term_debt
   let prevCurrentDebt = baseYear.current_debt
   let prevEquity = baseYear.stockholders_equity
-  let prevCash = baseYear.cash
   const goodwill = baseYear.goodwill
   const otherNca = baseYear.other_noncurrent_assets
   const otherNcl = baseYear.other_noncurrent_liabilities ?? 0
@@ -378,7 +377,7 @@ export function computeForecast(
     prevLtDebt = newLtDebt
     prevCurrentDebt = newCurrentDebt
     prevEquity = newEquity
-    prevCash = endingCash
+    void endingCash // prevCash tracking removed (unused)
   }
 
   // Extract DCF Inputs
@@ -458,7 +457,7 @@ export function computeForecast(
       cashFlow: cf,
       dcfInputs,
     },
-    mergedPresets: assumptions,
+    mergedPresets: assumptions as unknown as PresetAssumptions,
     aiForecasts,
     validation,
     revenues: is['Total Revenue'].slice(1), // Y1-Y5, excluding base year

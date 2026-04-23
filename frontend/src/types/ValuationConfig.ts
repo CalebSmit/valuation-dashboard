@@ -1,18 +1,24 @@
-export enum TerminalValueMethod {
-  Blended = 'blended',
-  ExitMultipleOnly = 'exit',
-  GordonGrowthOnly = 'gordon',
-}
+// Using const objects + string literal types instead of enums to comply with
+// `erasableSyntaxOnly: true` (TypeScript 5.5+ strict mode).
 
-export enum CashFlowBasis {
-  FCFF = 'fcff',
-  FCFE = 'fcfe',
-}
+export const TerminalValueMethod = {
+  Blended: 'blended',
+  ExitMultipleOnly: 'exit',
+  GordonGrowthOnly: 'gordon',
+} as const
+export type TerminalValueMethod = typeof TerminalValueMethod[keyof typeof TerminalValueMethod]
 
-export enum DiscountingConvention {
-  EndOfPeriod = 'end',
-  MidPeriod = 'mid',
-}
+export const CashFlowBasis = {
+  FCFF: 'fcff',
+  FCFE: 'fcfe',
+} as const
+export type CashFlowBasis = typeof CashFlowBasis[keyof typeof CashFlowBasis]
+
+export const DiscountingConvention = {
+  EndOfPeriod: 'end',
+  MidPeriod: 'mid',
+} as const
+export type DiscountingConvention = typeof DiscountingConvention[keyof typeof DiscountingConvention]
 
 export interface DCFConfig {
   terminalValueMethod: TerminalValueMethod

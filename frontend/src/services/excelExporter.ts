@@ -10,8 +10,6 @@ import * as XLSX from 'xlsx'
 import type { ValuationRun } from '../types/ValuationRun.ts'
 import type { FCFProjection } from '../types/DCFOutput.ts'
 import type { SourcedAssumption } from '../types/Assumptions.ts'
-import type { BlendedPriceTarget } from '../types/BlendedOutput.ts'
-import type { ValuationConfig } from '../types/ValuationConfig.ts'
 import { TerminalValueMethod, CashFlowBasis, DiscountingConvention } from '../types/ValuationConfig.ts'
 import { format } from 'date-fns'
 

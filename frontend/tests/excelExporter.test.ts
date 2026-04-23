@@ -146,7 +146,8 @@ describe('excelExporter', () => {
     expect(sheetNames).toContain('Scenario Analysis')
     expect(sheetNames).toContain('About_Company')
     expect(sheetNames).toContain('Sources_Methodology')
-    expect(sheetNames).toHaveLength(7)
+    expect(sheetNames).toContain('Blended Valuation')
+    expect(sheetNames).toHaveLength(8)
   })
 
   it('filename includes ticker and date', () => {

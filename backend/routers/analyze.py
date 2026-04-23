@@ -243,4 +243,12 @@ async def analyze_ticker(ticker: str, request: AnalyzeRequest):
                 yield _sse("error", data)
                 return
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

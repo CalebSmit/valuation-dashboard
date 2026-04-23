@@ -84,8 +84,8 @@ export function computeDDM(
 ): DDMOutput {
   const applicability = checkDDMApplicability(data)
 
-  // Hard gate: no dividends or zero DPS — DDM is mathematically impossible
-  if (!applicability.isApplicable) {
+  // Hard gate: no dividends, zero DPS, or AI explicitly marked not applicable
+  if (!applicability.isApplicable || assumptions.is_applicable === false) {
     return {
       isApplicable: false,
       applicabilityCriteria: applicability.criteria,

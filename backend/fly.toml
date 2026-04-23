@@ -1,0 +1,37 @@
+# Fly.io configuration for the Valuation Dashboard backend.
+# Deploy with: fly launch --config fly.toml (from the backend/ directory)
+#
+# Required secrets (set with `fly secrets set KEY=value`):
+#   VALUATION_DASHBOARD_ALLOWED_ORIGINS=https://your-project.pages.dev
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   PERPLEXITY_API_KEY=...   (optional)
+#   GEMINI_API_KEY=...       (optional)
+
+app = "valuation-dashboard-api"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# Persistent volume for raw_data.xlsx and cache files.
+# Create with: fly volumes create raw_data_vol --size 1 --region ord
+[[mounts]]
+  source = "raw_data_vol"
+  destination = "/data"
