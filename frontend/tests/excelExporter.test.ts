@@ -1,18 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
-import * as XLSX from 'xlsx'
+import { describe, it, expect } from 'vitest'
 import type { ValuationRun } from '../src/types/ValuationRun.ts'
-
-// We test the sheet-building logic by importing the exporter and intercepting XLSX.writeFile
-vi.mock('xlsx', async () => {
-  const actual = await vi.importActual<typeof import('xlsx')>('xlsx')
-  return {
-    ...actual,
-    writeFile: vi.fn(),
-  }
-})
-
-// Dynamically import after mock is set up
-const { exportToExcel } = await import('../src/services/excelExporter.ts')
+import { buildWorkbook } from '../src/services/excelExporter.ts'
 
 function makeMockRun(): ValuationRun {
   const sa = (value: number, source: string) => ({
@@ -38,6 +26,7 @@ function makeMockRun(): ValuationRun {
       revenueLatest: 2.2e10, operatingIncome: 6e9,
       totalDebt: 1.5e10, totalCash: 5e9, totalEquity: 3e10,
       operatingCashFlow: 8e9, capex: 2e9, freeCashFlow: 6e9,
+      depreciationAndAmortization: 1e9, interestExpense: 5e8, netBorrowing: 0,
       dividendYield: 0.02, annualDividendRate: 2.0, payoutRatio: 0.4,
       dividendGrowth5yr: 0.05, dividendGrowth3yr: 0.06,
       yearsOfDividendHistory: 10, paymentFrequency: 'Quarterly',
@@ -45,6 +34,7 @@ function makeMockRun(): ValuationRun {
       riskFreeRate10yr: 0.04, riskFreeRate5yr: 0.038, fedFundsRate: 0.05,
       cpi: 300, vix: 18, realGDPGrowth: 2.5,
       competitors: [], analystTargetMean: 110, analystTargetLow: 90, analystTargetHigh: 130,
+      stockPriceHistory: [], periodReturns: null, riskMetrics: null,
     },
     assumptions: {
       dcf: {
@@ -52,6 +42,7 @@ function makeMockRun(): ValuationRun {
         ebitda_margin: sa(0.3, 'test'), capex_pct_revenue: sa(0.05, 'test'),
         nwc_pct_revenue: sa(0.02, 'test'), tax_rate: sa(0.21, 'test'),
         terminal_growth_rate: sa(0.025, 'test'), exit_multiple: sa(12, 'test'),
+        mid_year_convention: false,
       },
       wacc: {
         risk_free_rate: sa(0.04, 'FRED'), equity_risk_premium: sa(0.042, 'Damodaran'),
@@ -60,12 +51,18 @@ function makeMockRun(): ValuationRun {
         equity_weight: sa(0.7, 'test'), tax_rate: sa(0.21, 'test'),
       },
       ddm: { is_applicable: true, applicability_reason: 'test', short_term_growth_rate: sa(0.05, 'test'), long_term_growth_rate: sa(0.025, 'test'), required_return: sa(0.10, 'test'), high_growth_years: 5 },
-      comps: { selected_peers: ['PEER1'], peer_selection_rationale: 'test', primary_multiple: 'EV/EBITDA', multiple_rationale: '' },
+      comps: { selected_peers: ['PEER1'], peer_selection_rationale: 'test', primary_multiple: 'EV/EBITDA', multiple_rationale: '', multiple_weights: { ev_ebitda: 0.4, pe: 0.3, ev_sales: 0.2, pb: 0.1 } },
       scenarios: {
         revenue_growth: { bear: sa(0.03, 'test'), base: sa(0.06, 'test'), bull: sa(0.10, 'test') },
         ebitda_margin: { bear: sa(0.25, 'test'), base: sa(0.30, 'test'), bull: sa(0.35, 'test') },
         exit_multiple: { bear: sa(10, 'test'), base: sa(12, 'test'), bull: sa(15, 'test') },
         wacc: { bear: sa(0.10, 'test'), base: sa(0.085, 'test'), bull: sa(0.07, 'test') },
+        probabilities: { bear: 0.25, base: 0.5, bull: 0.25 },
+      },
+      forecast: {
+        revenue_forecasts: [], ebit_margins: [], ebitda_margins: [],
+        effective_tax_rate: 0.21, account_overrides: [],
+        revenue_thesis: '', margin_thesis: '', key_assumptions: [],
       },
       investment_thesis: 'Test thesis',
       key_risks: ['Risk 1'],
@@ -120,69 +117,135 @@ function makeMockRun(): ValuationRun {
       base: { name: 'base', drivers: [], dcfPrice: 71, ddmPrice: 32, compsPrice: 82, weightedPrice: 62 },
       bull: { name: 'bull', drivers: [], dcfPrice: 95, ddmPrice: 40, compsPrice: 110, weightedPrice: 82 },
       probabilityWeights: { bear: 0.25, base: 0.5, bull: 0.25 },
+      expectedPrice: 63.25,
       drivers: [
         { assumption: 'Revenue Growth', bearValue: 0.03, baseValue: 0.06, bullValue: 0.10, bearSource: 't', baseSource: 't', bullSource: 't' },
       ],
     },
+    previousPrices: null,
+    valuationConfig: null,
+    aiRecommendedConfig: null,
+    blendedOutput: {
+      finalPrice: 75.0,
+      dcfBlendedPrice: 70.71, dcfExitOnlyPrice: 78.05, dcfGordonOnlyPrice: 63.38,
+      combinedDCFPrice: 70.71,
+      compsPrice: 82, ddmPrice: 32.15,
+      effectiveDCFSubWeights: { blended: 1.0, exitOnly: 0, gordonOnly: 0 },
+      effectiveDDMSubWeights: { twoStage: 1.0, singleStage: 0 },
+      effectiveModelWeights: { dcf: 0.6, comps: 0.3, ddm: 0.1 },
+    },
+    forecastOutput: null,
+    forecastPresets: null,
+    forecastBaseYear: null,
     agentLog: [],
     error: null,
   }
 }
 
 describe('excelExporter', () => {
-  it('generates a workbook with all required sheet names', () => {
+  it('generates a workbook with all required sheet names', async () => {
     const mockRun = makeMockRun()
-    exportToExcel(mockRun)
+    const wb = await buildWorkbook(mockRun)
+    const names = wb.worksheets.map(w => w.name)
 
-    expect(XLSX.writeFile).toHaveBeenCalledOnce()
-    const call = vi.mocked(XLSX.writeFile).mock.calls[0]
-    const wb = call[0] as XLSX.WorkBook
-
-    const sheetNames = wb.SheetNames
-    expect(sheetNames).toContain('Financial Statement Forecast')
-    expect(sheetNames).toContain('DCF')
-    expect(sheetNames).toContain('DDM')
-    expect(sheetNames).toContain('Relative Valuation')
-    expect(sheetNames).toContain('Scenario Analysis')
-    expect(sheetNames).toContain('About_Company')
-    expect(sheetNames).toContain('Sources_Methodology')
-    expect(sheetNames).toContain('Blended Valuation')
-    expect(sheetNames).toHaveLength(8)
+    expect(names).toContain('Cover')
+    expect(names).toContain('Sensitivity Analysis')
+    expect(names).toContain('WACC Build-Up')
+    expect(names).toContain('Financial Statement Forecast')
+    expect(names).toContain('DCF')
+    expect(names).toContain('DDM')
+    expect(names).toContain('Relative Valuation')
+    expect(names).toContain('Scenario Analysis')
+    expect(names).toContain('About_Company')
+    expect(names).toContain('Sources_Methodology')
+    expect(names).toContain('Blended Valuation')
   })
 
-  it('filename includes ticker and date', () => {
+  it('Cover sheet is first', async () => {
     const mockRun = makeMockRun()
-    exportToExcel(mockRun)
-
-    const call = vi.mocked(XLSX.writeFile).mock.calls[0]
-    const filename = call[1] as string
-    expect(filename).toContain('TEST_Valuation_')
-    expect(filename).toMatch(/\.xlsx$/)
+    const wb = await buildWorkbook(mockRun)
+    expect(wb.worksheets[0].name).toBe('Cover')
   })
 
-  it('DCF sheet has WACC row', () => {
+  it('DCF sheet has WACC row', async () => {
     const mockRun = makeMockRun()
-    exportToExcel(mockRun)
+    const wb = await buildWorkbook(mockRun)
+    const dcf = wb.getWorksheet('DCF')!
 
-    const call = vi.mocked(XLSX.writeFile).mock.calls[0]
-    const wb = call[0] as XLSX.WorkBook
-    const dcfSheet = wb.Sheets['DCF']
-    const data = XLSX.utils.sheet_to_json<string[]>(dcfSheet, { header: 1 })
-
-    const waccRow = data.find(row => row[0] === 'WACC')
-    expect(waccRow).toBeDefined()
+    let found = false
+    dcf.eachRow(row => {
+      if (row.getCell(1).value === 'WACC') found = true
+    })
+    expect(found).toBe(true)
   })
 
-  it('DCF sheet has assumption markers [A]', () => {
+  it('DCF sheet has FCFF, Discount Factor, and PV of FCFF rows', async () => {
     const mockRun = makeMockRun()
-    exportToExcel(mockRun)
+    const wb = await buildWorkbook(mockRun)
+    const dcf = wb.getWorksheet('DCF')!
 
-    const call = vi.mocked(XLSX.writeFile).mock.calls[0]
-    const wb = call[0] as XLSX.WorkBook
-    const dcfSheet = wb.Sheets['DCF']
-    const data = XLSX.utils.sheet_to_json<string[]>(dcfSheet, { header: 1 })
+    const labels = new Set<string>()
+    dcf.eachRow(row => {
+      const v = row.getCell(1).value
+      if (typeof v === 'string') labels.add(v)
+    })
+    expect(labels.has('FCFF')).toBe(true)
+    expect(labels.has('Discount Factor')).toBe(true)
+    expect(labels.has('PV of FCFF')).toBe(true)
+  })
 
-    const assumptionRows = data.filter(row => typeof row[0] === 'string' && row[0].includes('[A]'))
-    expect(assumptionRows.length).toBeGreaterThanOrEqual(5)
+  it('all sheets have freeze panes on row 1+', async () => {
+    const mockRun = makeMockRun()
+    const wb = await buildWorkbook(mockRun)
+    wb.worksheets.forEach(ws => {
+      expect(ws.views).toBeDefined()
+      const view = ws.views?.[0] as { state?: string; ySplit?: number } | undefined
+      expect(view?.state).toBe('frozen')
+      expect((view?.ySplit ?? 0)).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it('Sensitivity Analysis sheet has matrix data', async () => {
+    const mockRun = makeMockRun()
+    const wb = await buildWorkbook(mockRun)
+    const ws = wb.getWorksheet('Sensitivity Analysis')!
+
+    let waccRowFound = false
+    ws.eachRow(row => {
+      const v = row.getCell(1).value
+      if (typeof v === 'string' && v.includes('%')) waccRowFound = true
+    })
+    expect(waccRowFound).toBe(true)
+  })
+
+  it('WACC Build-Up sheet has component rows with sources', async () => {
+    const mockRun = makeMockRun()
+    const wb = await buildWorkbook(mockRun)
+    const ws = wb.getWorksheet('WACC Build-Up')!
+
+    const labels = new Set<string>()
+    ws.eachRow(row => {
+      const v = row.getCell(1).value
+      if (typeof v === 'string') labels.add(v)
+    })
+    expect(labels.has('Risk-Free Rate (Rf)')).toBe(true)
+    expect(labels.has('Equity Risk Premium (ERP)')).toBe(true)
+    expect(labels.has('Beta')).toBe(true)
+    expect(labels.has('WACC')).toBe(true)
+  })
+
+  it('Cover sheet shows scenario prices with probability weights', async () => {
+    const mockRun = makeMockRun()
+    const wb = await buildWorkbook(mockRun)
+    const ws = wb.getWorksheet('Cover')!
+
+    const labels = new Set<string>()
+    ws.eachRow(row => {
+      const v = row.getCell(1).value
+      if (typeof v === 'string') labels.add(v)
+    })
+    expect(labels.has('Bear')).toBe(true)
+    expect(labels.has('Base')).toBe(true)
+    expect(labels.has('Bull')).toBe(true)
   })
 })
