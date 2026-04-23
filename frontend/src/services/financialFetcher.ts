@@ -4,9 +4,10 @@
  */
 import type { FinancialData, CompetitorData } from '../types/FinancialData.ts'
 import type { AgentLogEntry } from '../types/ValuationRun.ts'
+import { API_BASE } from '../utils/constants.ts'
 
 export async function fetchFinancialSummary(): Promise<FinancialData> {
-  const response = await fetch('/api/financials/summary')
+  const response = await fetch(`${API_BASE}/api/financials/summary`)
 
   if (!response.ok) {
     let detail: string
@@ -27,7 +28,7 @@ export async function fetchFinancialSummary(): Promise<FinancialData> {
 }
 
 export async function fetchSheetNames(): Promise<string[]> {
-  const response = await fetch('/api/sheets')
+  const response = await fetch(`${API_BASE}/api/sheets`)
 
   if (!response.ok) {
     throw new Error('Failed to fetch sheet list')
@@ -41,7 +42,7 @@ export async function fetchSheet(sheetName: string): Promise<{
   columns: string[]
   data: Record<string, unknown>[]
 }> {
-  const response = await fetch(`/api/sheets/${encodeURIComponent(sheetName)}`)
+  const response = await fetch(`${API_BASE}/api/sheets/${encodeURIComponent(sheetName)}`)
 
   if (!response.ok) {
     throw new Error(`Failed to fetch sheet: ${sheetName}`)
@@ -60,7 +61,7 @@ export async function runPipeline(
 
   let response: Response
   try {
-    response = await fetch(`/api/pipeline/${encodeURIComponent(ticker)}`, {
+    response = await fetch(`${API_BASE}/api/pipeline/${encodeURIComponent(ticker)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fred_api_key: fredApiKey ?? null }),
@@ -152,7 +153,7 @@ export async function runPipeline(
 export async function fetchPeerData(tickers: string[]): Promise<CompetitorData[]> {
   if (tickers.length === 0) return []
   const response = await fetch(
-    `/api/peers?tickers=${tickers.map(encodeURIComponent).join(',')}`
+    `${API_BASE}/api/peers?tickers=${tickers.map(encodeURIComponent).join(',')}`
   )
   if (!response.ok) {
     console.warn('Failed to fetch peer data:', response.status)
@@ -168,7 +169,7 @@ export async function checkHealth(): Promise<{
   configuredProviders: string[]
   configuredProviderCount: number
 }> {
-  const response = await fetch('/api/health')
+  const response = await fetch(`${API_BASE}/api/health`)
   const json = await response.json()
   return {
     status: json.status,

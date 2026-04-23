@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ValuationRun } from '../types/ValuationRun.ts'
 import type { Assumptions } from '../types/Assumptions.ts'
 import type { CritiqueReport, CritiqueIssue } from '../types/CritiqueResult.ts'
+import { API_BASE } from '../utils/constants.ts'
 
 export interface UseCritiqueResult {
   report: CritiqueReport | null
@@ -57,7 +58,7 @@ export function useCritique(run: ValuationRun | null): UseCritiqueResult {
 
     const payload = buildCritiquePayload(run)
 
-    fetch('/api/critique', {
+    fetch(`${API_BASE}/api/critique`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -109,7 +110,7 @@ export function useCritique(run: ValuationRun | null): UseCritiqueResult {
       setRefineChanges([])
 
       try {
-        const res = await fetch('/api/refine', {
+        const res = await fetch(`${API_BASE}/api/refine`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -1,3 +1,9 @@
+// Backend API base URL.
+// In dev, Vite proxies /api to localhost:8000 so this stays empty.
+// For a split deployment (frontend on Cloudflare Pages, backend on Fly.io/Render/etc.),
+// set VITE_API_BASE_URL=https://your-api.example.com in the Cloudflare Pages env vars.
+export const API_BASE: string = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
+
 // Default valuation assumptions (Damodaran / FRED)
 export const DEFAULT_RISK_FREE_RATE = 0.0406
 export const DEFAULT_EQUITY_RISK_PREMIUM = 0.0423

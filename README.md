@@ -165,4 +165,29 @@ VERIFY_DASHBOARD.bat
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for environment variables, CORS configuration, and backend-owned provider key setup.
+### Local (default)
+
+Both frontend and backend run on your machine. No extra configuration needed — Vite proxies `/api` to `localhost:8000` automatically.
+
+### Split deployment (e.g. Cloudflare Pages + Fly.io)
+
+The frontend (static React build) and backend (Python/FastAPI) are deployed separately:
+
+| Part | Where | Notes |
+|------|-------|-------|
+| Frontend | Cloudflare Pages, Netlify, Vercel, etc. | Static files only — `npm run build` output |
+| Backend | Fly.io, Render, Railway, a VPS, etc. | Needs Python, file system access for `raw_data.xlsx` |
+
+**Backend setup:**
+1. Deploy the `backend/` folder to any Python host
+2. Set env vars: `ANTHROPIC_API_KEY`, `VALUATION_DASHBOARD_ALLOWED_ORIGINS=https://your-frontend.pages.dev`
+3. Upload `raw_data.xlsx` to the server (or trigger the pipeline remotely)
+
+**Frontend setup (Cloudflare Pages):**
+1. Set build command: `cd frontend && npm install && npm run build`
+2. Set output directory: `frontend/dist`
+3. Add environment variable: `VITE_API_BASE_URL=https://your-backend.fly.dev`
+
+Cloudflare Pages itself only hosts the static files. The Python backend **cannot** run on Cloudflare Workers/Pages — it requires a separate Python host.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for full environment variable reference.

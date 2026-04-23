@@ -2,12 +2,13 @@
  * Fetches forecast preset assumptions and base year data from the backend.
  */
 import type { PresetAssumptions, BaseYearData } from '../types/ForecastOutput.ts'
+import { API_BASE } from '../utils/constants.ts'
 
 export async function fetchForecastPresets(): Promise<{
   presets: PresetAssumptions
   baseYear: BaseYearData
 }> {
-  const response = await fetch('/api/forecasts/presets')
+  const response = await fetch(`${API_BASE}/api/forecasts/presets`)
 
   if (!response.ok) {
     let detail: string

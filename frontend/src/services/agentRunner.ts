@@ -14,6 +14,7 @@ import {
   DEFAULT_MODEL_WEIGHTS,
 } from '../types/ValuationConfig.ts'
 import { validateAssumptions } from './assumptionValidator.ts'
+import { API_BASE } from '../utils/constants.ts'
 
 export function parseAIRecommendedConfig(raw: Record<string, unknown> | undefined): AIRecommendedConfig | null {
   if (!raw) return null
@@ -118,7 +119,7 @@ export async function runAgent(
 
   let response: Response
   try {
-    response = await fetch(`/api/analyze/${encodeURIComponent(ticker)}`, {
+    response = await fetch(`${API_BASE}/api/analyze/${encodeURIComponent(ticker)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ api_key: apiKey, provider, deep_research: deepResearch }),
