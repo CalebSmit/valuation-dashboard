@@ -25,12 +25,28 @@ from services.ticker_validation import is_valid_ticker, normalize_ticker
 
 PIPELINE_TIMEOUT = 600  # seconds — kept for API compat
 
-# Simple lock to prevent concurrent pipeline runs
+# Pipeline lock with timestamp to prevent permanent lock after Render restart
 _pipeline_running = False
+_pipeline_started_at: float | None = None
+# If _pipeline_running has been True for longer than this, auto-reset the lock.
+# Set slightly above PIPELINE_TIMEOUT so a genuinely-running pipeline never
+# gets prematurely cleared, but a stale lock from a crashed instance does.
+_PIPELINE_LOCK_TIMEOUT = 12 * 60  # 12 minutes
 
 
 def is_pipeline_running() -> bool:
-    """Check if the data pipeline is currently executing."""
+    """Check if the data pipeline is currently executing.
+
+    Auto-resets the lock if it has been held for more than _PIPELINE_LOCK_TIMEOUT
+    seconds (handles Render instance restart mid-run).
+    """
+    import time
+    global _pipeline_running, _pipeline_started_at
+    if _pipeline_running and _pipeline_started_at is not None:
+        if time.monotonic() - _pipeline_started_at > _PIPELINE_LOCK_TIMEOUT:
+            # Stale lock — reset so new runs are not blocked indefinitely
+            _pipeline_running = False
+            _pipeline_started_at = None
     return _pipeline_running
 
 
@@ -513,7 +529,9 @@ async def run_pipeline(ticker: str, fred_api_key: str | None = None) -> AsyncGen
 
     yield f"Starting pipeline for {clean_ticker}..."
 
+    import time
     _pipeline_running = True
+    _pipeline_started_at = time.monotonic()
     messages: list[str] = []
     error: list[Exception] = []
 
@@ -553,3 +571,4 @@ async def run_pipeline(ticker: str, fred_api_key: str | None = None) -> AsyncGen
         raise PipelineError(f"Pipeline failed: {exc}") from exc
     finally:
         _pipeline_running = False
+        _pipeline_started_at = None

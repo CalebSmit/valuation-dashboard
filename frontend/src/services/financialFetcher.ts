@@ -1,10 +1,61 @@
 /**
  * Fetches financial data from the FastAPI backend.
- * Includes pipeline trigger to auto-run py main.py.
+ * Includes pipeline trigger to auto-run the data pipeline.
  */
 import type { FinancialData, CompetitorData } from '../types/FinancialData.ts'
 import type { AgentLogEntry } from '../types/ValuationRun.ts'
 import { API_BASE } from '../utils/constants.ts'
+
+/** Classify a raw error message into a user-friendly string. */
+export function classifyError(raw: string): string {
+  const lower = raw.toLowerCase()
+
+  // Backend cold start / unreachable
+  if (
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('network error') ||
+    lower.includes('load failed') ||
+    lower.includes('econnrefused') ||
+    lower.includes('timeout') ||
+    lower.includes('timed out')
+  ) {
+    return 'Backend is waking up — please wait 30 seconds and try again.'
+  }
+
+  // Ticker not found or delisted
+  if (
+    lower.includes('no data') ||
+    lower.includes('not found') ||
+    lower.includes('invalid ticker') ||
+    lower.includes('delisted') ||
+    lower.includes('no price data') ||
+    lower.includes('yfinance') ||
+    lower.includes('no history found')
+  ) {
+    return 'Ticker not found or no data available. Check the symbol and try again.'
+  }
+
+  // Anthropic API key errors
+  if (
+    lower.includes('invalid api key') ||
+    lower.includes('authentication') ||
+    lower.includes('401') ||
+    lower.includes('unauthorized') ||
+    lower.includes('no api key available') ||
+    lower.includes('invalid x-api-key') ||
+    lower.includes('api_key')
+  ) {
+    return 'Invalid API key — check your key in Settings.'
+  }
+
+  // Pipeline already running
+  if (lower.includes('already running') || lower.includes('pipeline is currently running')) {
+    return 'A data pipeline is already running. Please wait for it to finish, then try again.'
+  }
+
+  return raw
+}
 
 export async function fetchFinancialSummary(): Promise<FinancialData> {
   const response = await fetch(`${API_BASE}/api/financials/summary`)
@@ -18,9 +69,9 @@ export async function fetchFinancialSummary(): Promise<FinancialData> {
       detail = response.statusText
     }
     if (response.status === 404) {
-      throw new Error(detail || 'raw_data.xlsx not found. Run the Python pipeline first (py main.py).')
+      throw new Error(classifyError(detail || 'Ticker not found or no data available.'))
     }
-    throw new Error(`Failed to fetch financial data: ${detail}`)
+    throw new Error(classifyError(`Failed to fetch financial data: ${detail}`))
   }
 
   const json = await response.json()
@@ -72,7 +123,7 @@ export async function runPipeline(
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error('Pipeline timed out after 10 minutes.')
     }
-    throw error
+    throw new Error(classifyError(error instanceof Error ? error.message : String(error)))
   }
 
   if (!response.ok) {
@@ -85,7 +136,7 @@ export async function runPipeline(
       const text = await response.text().catch(() => response.statusText)
       detail = text || response.statusText
     }
-    throw new Error(`Pipeline failed to start: ${detail}`)
+    throw new Error(classifyError(`Pipeline failed to start: ${detail}`))
   }
 
   if (!response.body) {
@@ -129,10 +180,10 @@ export async function runPipeline(
           } else if (event.type === 'error') {
             onStep({
               status: 'error',
-              text: event.message,
+              text: classifyError(event.message),
               timestamp: Date.now(),
             })
-            throw new Error(event.message)
+            throw new Error(classifyError(event.message))
           }
         } catch (parseError) {
           if (parseError instanceof SyntaxError) continue
@@ -163,18 +214,39 @@ export async function fetchPeerData(tickers: string[]): Promise<CompetitorData[]
   return json.peers as CompetitorData[]
 }
 
-export async function checkHealth(): Promise<{
+/**
+ * Check backend health. Resolves to a partial result on network error so the
+ * caller can treat an unreachable backend as "no configured providers".
+ */
+export async function checkHealth(timeoutMs = 8000): Promise<{
   status: string
   rawDataExists: boolean
   configuredProviders: string[]
   configuredProviderCount: number
+  reachable: boolean
 }> {
-  const response = await fetch(`${API_BASE}/api/health`)
-  const json = await response.json()
-  return {
-    status: json.status,
-    rawDataExists: json.raw_data_exists,
-    configuredProviders: json.configured_providers ?? [],
-    configuredProviderCount: json.configured_provider_count ?? 0,
+  const controller = new AbortController()
+  const timerId = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(`${API_BASE}/api/health`, { signal: controller.signal })
+    clearTimeout(timerId)
+    const json = await response.json()
+    return {
+      status: json.status,
+      rawDataExists: json.raw_data_exists,
+      configuredProviders: json.configured_providers ?? [],
+      configuredProviderCount: json.configured_provider_count ?? 0,
+      reachable: true,
+    }
+  } catch {
+    clearTimeout(timerId)
+    return {
+      status: 'unreachable',
+      rawDataExists: false,
+      configuredProviders: [],
+      configuredProviderCount: 0,
+      reachable: false,
+    }
   }
 }

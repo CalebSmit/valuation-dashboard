@@ -26,10 +26,10 @@ export function TickerInput({ onAnalyze, onLoadRun, recentRuns, disabled }: Tick
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-8 px-6">
+    <div className="flex flex-col items-center justify-center min-h-screen gap-6 sm:gap-8 px-4 sm:px-6">
       <div className="text-center">
         <h1
-          className="text-4xl font-bold tracking-tight mb-2 ticker-heading"
+          className="text-3xl sm:text-4xl font-bold tracking-tight mb-2 ticker-heading"
         >
           VALUATION DASHBOARD
         </h1>
@@ -38,8 +38,8 @@ export function TickerInput({ onAnalyze, onLoadRun, recentRuns, disabled }: Tick
         </p>
       </div>
 
-      <div className="flex flex-col items-center gap-1.5">
-        <div className="flex gap-3 items-center">
+      <div className="flex flex-col items-center gap-1.5 w-full max-w-sm sm:max-w-none">
+        <div className="flex flex-col sm:flex-row gap-3 items-center w-full sm:w-auto">
           <input
             type="text"
             value={ticker}
@@ -47,14 +47,17 @@ export function TickerInput({ onAnalyze, onLoadRun, recentRuns, disabled }: Tick
             placeholder="TICKER"
             maxLength={10}
             disabled={disabled}
-            className="p-4 text-2xl text-center w-52 ticker-input"
+            className="p-4 text-2xl text-center w-full sm:w-52 ticker-input"
             onKeyDown={e => { if (e.key === 'Enter' && !disabled) handleSubmit() }}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
           />
           <button
             type="button"
             onClick={handleSubmit}
             disabled={disabled}
-            className="px-8 py-4 text-lg font-bold uppercase tracking-widest analyze-btn"
+            className="px-8 py-4 text-lg font-bold uppercase tracking-widest analyze-btn w-full sm:w-auto"
           >
             ANALYZE
           </button>

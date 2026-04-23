@@ -16,8 +16,15 @@ import { ExportButton } from './components/ExportButton.tsx'
 import { EmptyState } from './components/EmptyState.tsx'
 import { ErrorState } from './components/ErrorState.tsx'
 import { OnboardingGuide } from './components/OnboardingGuide.tsx'
-import { exportToExcel } from './services/excelExporter.ts'
-import { exportToPDF } from './services/pdfExporter.ts'
+// Lazy-load heavy export libraries (exceljs, jspdf) only when user clicks Export
+const exportToExcel = async (run: Parameters<typeof import('./services/excelExporter.ts').exportToExcel>[0]) => {
+  const { exportToExcel: fn } = await import('./services/excelExporter.ts')
+  return fn(run)
+}
+const exportToPDF = async (run: Parameters<typeof import('./services/pdfExporter.ts').exportToPDF>[0]) => {
+  const { exportToPDF: fn } = await import('./services/pdfExporter.ts')
+  return fn(run)
+}
 
 function App() {
   const { provider, apiKey, fredApiKey, providerConfiguredOnServer, isSettingsOpen, setProvider, setApiKey, setFredApiKey, openSettings, closeSettings } = useSettings()
@@ -141,7 +148,7 @@ function App() {
         {showDashboard && (
           <div className="flex-1 flex flex-col">
             {/* Header */}
-            <div className="flex justify-between items-center px-6 py-3 scanline-header dashboard-header">
+            <div className="flex justify-between items-center px-3 sm:px-6 py-3 scanline-header dashboard-header gap-2">
               <div className="flex items-center gap-4">
                 <button
                   type="button"
@@ -150,8 +157,8 @@ function App() {
                 >
                   New
                 </button>
-                <div>
-                  <h1 className="text-xl font-bold ticker-title">
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-xl font-bold ticker-title truncate">
                     {run.ticker}
                     {run.cached && (
                       <span

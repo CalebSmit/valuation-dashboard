@@ -19,11 +19,11 @@ interface KPIItemProps {
 
 function KPIItem({ label, value, valueClass }: KPIItemProps) {
   return (
-    <div className="flex flex-col px-4 py-2 kpi-item">
-      <span className="text-[10px] uppercase tracking-wider kpi-label">
+    <div className="flex flex-col px-3 py-2 kpi-item min-w-0">
+      <span className="text-[10px] uppercase tracking-wider kpi-label whitespace-nowrap">
         {label}
       </span>
-      <span className={`text-sm font-semibold ${valueClass ?? 'kpi-value'}`}>
+      <span className={`text-sm font-semibold truncate ${valueClass ?? 'kpi-value'}`}>
         {value}
       </span>
     </div>
@@ -35,8 +35,8 @@ export function OverviewTab({ run, blendedOutput }: OverviewTabProps) {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* KPI Strip */}
-      <div className="flex flex-wrap card">
+      {/* KPI Strip — 4 columns on mobile, 8 across on wider screens */}
+      <div className="grid grid-cols-4 sm:grid-cols-8 card overflow-hidden">
         <KPIItem label="Market Cap" value={formatMillions(data?.marketCap)} />
         <KPIItem label="P/E (TTM)" value={formatMultiple(data?.peRatioTTM)} />
         <KPIItem label="EV/EBITDA" value={formatMultiple(data?.evToEbitda)} />
@@ -104,8 +104,8 @@ export function OverviewTab({ run, blendedOutput }: OverviewTabProps) {
         </div>
       )}
 
-      {/* Valuation Summary + Implied Prices side-by-side */}
-      <div className="flex gap-5 items-stretch">
+      {/* Valuation Summary + Implied Prices — stack on mobile, side-by-side on desktop */}
+      <div className="flex flex-col sm:flex-row gap-5 items-stretch">
 
         {/* Football Field — grows to fill remaining space */}
         <div className="p-4 card valuation-hero flex-1 min-w-0">

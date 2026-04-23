@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useState, lazy, Suspense, type KeyboardEvent } from 'react'
 import type { ValuationRun } from '../types/ValuationRun.ts'
 import type { Assumptions } from '../types/Assumptions.ts'
 import type { FinancialData } from '../types/FinancialData.ts'
@@ -9,13 +9,27 @@ import type { ForecastOutput } from '../types/ForecastOutput.ts'
 import type { CritiqueReport, CritiqueGrade } from '../types/CritiqueResult.ts'
 import { ValuationConfigPanel } from './ValuationConfigPanel.tsx'
 import { OverviewTab } from './OverviewTab.tsx'
-import { DCFTab } from './DCFTab.tsx'
-import { DDMTab } from './DDMTab.tsx'
-import { CompsTab } from './CompsTab.tsx'
-import { ScenariosTab } from './ScenariosTab.tsx'
-import { CompetitiveTab } from './CompetitiveTab.tsx'
-import { ForecastsTab } from './ForecastsTab.tsx'
-import { CritiquePanel } from './CritiquePanel.tsx'
+
+// Heavy tabs loaded on demand to keep initial bundle small
+const DCFTab = lazy(() => import('./DCFTab.tsx').then(m => ({ default: m.DCFTab })))
+const DDMTab = lazy(() => import('./DDMTab.tsx').then(m => ({ default: m.DDMTab })))
+const CompsTab = lazy(() => import('./CompsTab.tsx').then(m => ({ default: m.CompsTab })))
+const ScenariosTab = lazy(() => import('./ScenariosTab.tsx').then(m => ({ default: m.ScenariosTab })))
+const CompetitiveTab = lazy(() => import('./CompetitiveTab.tsx').then(m => ({ default: m.CompetitiveTab })))
+const ForecastsTab = lazy(() => import('./ForecastsTab.tsx').then(m => ({ default: m.ForecastsTab })))
+const CritiquePanel = lazy(() => import('./CritiquePanel.tsx').then(m => ({ default: m.CritiquePanel })))
+
+function TabFallback() {
+  return (
+    <div className="flex items-center justify-center py-16">
+      <div className="flex gap-1.5">
+        <span className="loading-dot loading-dot-1" />
+        <span className="loading-dot loading-dot-2" />
+        <span className="loading-dot loading-dot-3" />
+      </div>
+    </div>
+  )
+}
 const TABS = ['Overview', 'Competitive', 'Forecasts', 'DCF', 'Comps', 'DDM', 'Scenarios', 'CFA Review'] as const
 type TabName = typeof TABS[number]
 
@@ -133,15 +147,15 @@ export function ValuationTabs({
 
   return (
     <div className="flex-1">
-      {/* Tab bar */}
-      <div className="flex gap-0 row-b" aria-label="Valuation workflow tabs">
+      {/* Tab bar — horizontally scrollable on mobile */}
+      <div className="flex gap-0 row-b overflow-x-auto scrollbar-hide" aria-label="Valuation workflow tabs" style={{ WebkitOverflowScrolling: 'touch' }}>
         {TABS.map((tab, index) => (
           <button
             key={tab}
             type="button"
             onClick={() => setActiveTab(tab)}
             onKeyDown={event => handleTabKeyDown(event, index)}
-            className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider ${activeTab === tab ? 'tab-btn-active' : 'tab-btn'}`}
+            className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap flex-shrink-0 ${activeTab === tab ? 'tab-btn-active' : 'tab-btn'}`}
             aria-label={`${tab} tab`}
           >
             {tab === 'CFA Review' && critiqueReport ? (
@@ -186,72 +200,74 @@ export function ValuationTabs({
           </div>
         )}
 
-        {activeTab === 'Overview' && (
-          <OverviewTab
-            run={run}
-            blendedOutput={blendedOutput}
-          />
-        )}
-        {activeTab === 'Forecasts' && (
-          <ForecastsTab
-            forecastOutput={liveForecastOutput ?? run.forecastOutput}
-            presets={run.forecastPresets}
-            baseYear={run.forecastBaseYear}
-            aiForecasts={mergedAssumptions?.forecast ?? null}
-            onPresetOverride={onForecastOverride}
-          />
-        )}
-        {activeTab === 'DCF' && mergedAssumptions && (
-          <DCFTab
-            dcfOutput={run.dcfOutput}
-            assumptions={mergedAssumptions}
-            financialData={mergedData}
-            originalData={originalData}
-            previousPrice={run.previousPrices?.dcf ?? null}
-            currentPrice={run.currentPrice ?? null}
-            onOverride={onOverride}
-            onDataOverride={onDataOverride}
-            dcfConfig={dcfConfig}
-            onDCFConfigChange={onDCFConfigChange}
-            fieldCorrections={run.fieldCorrections}
-          />
-        )}
-        {activeTab === 'DDM' && (
-          <DDMTab
-            ddmOutput={run.ddmOutput}
-            assumptions={mergedAssumptions}
-            currentDPS={mergedData?.annualDividendRate ?? null}
-            originalDPS={originalData?.annualDividendRate ?? null}
-            currentPrice={run.currentPrice ?? null}
-            onOverride={onOverride}
-            onDataOverride={onDataOverride}
-          />
-        )}
-        {activeTab === 'Comps' && (
-          <CompsTab compsOutput={run.compsOutput} currentPrice={run.currentPrice ?? null} />
-        )}
-        {activeTab === 'Scenarios' && (
-          <ScenariosTab
-            scenarioOutput={run.scenarioOutput}
-            assumptions={mergedAssumptions}
-            onOverride={onOverride}
-          />
-        )}
-        {activeTab === 'Competitive' && (
-          <CompetitiveTab financialData={mergedData} />
-        )}
-        {activeTab === 'CFA Review' && (
-          <CritiquePanel
-            report={critiqueReport}
-            isRunning={isCritiqueRunning}
-            isRefining={isRefining}
-            refineError={refineError}
-            refineChanges={refineChanges}
-            hasApiKey={hasApiKey}
-            onRefine={onRefine}
-            onDismissChanges={onDismissRefineChanges}
-          />
-        )}
+        <Suspense fallback={<TabFallback />}>
+          {activeTab === 'Overview' && (
+            <OverviewTab
+              run={run}
+              blendedOutput={blendedOutput}
+            />
+          )}
+          {activeTab === 'Forecasts' && (
+            <ForecastsTab
+              forecastOutput={liveForecastOutput ?? run.forecastOutput}
+              presets={run.forecastPresets}
+              baseYear={run.forecastBaseYear}
+              aiForecasts={mergedAssumptions?.forecast ?? null}
+              onPresetOverride={onForecastOverride}
+            />
+          )}
+          {activeTab === 'DCF' && mergedAssumptions && (
+            <DCFTab
+              dcfOutput={run.dcfOutput}
+              assumptions={mergedAssumptions}
+              financialData={mergedData}
+              originalData={originalData}
+              previousPrice={run.previousPrices?.dcf ?? null}
+              currentPrice={run.currentPrice ?? null}
+              onOverride={onOverride}
+              onDataOverride={onDataOverride}
+              dcfConfig={dcfConfig}
+              onDCFConfigChange={onDCFConfigChange}
+              fieldCorrections={run.fieldCorrections}
+            />
+          )}
+          {activeTab === 'DDM' && (
+            <DDMTab
+              ddmOutput={run.ddmOutput}
+              assumptions={mergedAssumptions}
+              currentDPS={mergedData?.annualDividendRate ?? null}
+              originalDPS={originalData?.annualDividendRate ?? null}
+              currentPrice={run.currentPrice ?? null}
+              onOverride={onOverride}
+              onDataOverride={onDataOverride}
+            />
+          )}
+          {activeTab === 'Comps' && (
+            <CompsTab compsOutput={run.compsOutput} currentPrice={run.currentPrice ?? null} />
+          )}
+          {activeTab === 'Scenarios' && (
+            <ScenariosTab
+              scenarioOutput={run.scenarioOutput}
+              assumptions={mergedAssumptions}
+              onOverride={onOverride}
+            />
+          )}
+          {activeTab === 'Competitive' && (
+            <CompetitiveTab financialData={mergedData} />
+          )}
+          {activeTab === 'CFA Review' && (
+            <CritiquePanel
+              report={critiqueReport}
+              isRunning={isCritiqueRunning}
+              isRefining={isRefining}
+              refineError={refineError}
+              refineChanges={refineChanges}
+              hasApiKey={hasApiKey}
+              onRefine={onRefine}
+              onDismissChanges={onDismissRefineChanges}
+            />
+          )}
+        </Suspense>
       </div>
     </div>
   )

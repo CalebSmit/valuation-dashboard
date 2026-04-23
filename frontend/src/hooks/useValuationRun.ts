@@ -8,7 +8,7 @@ import type { FinancialData } from '../types/FinancialData.ts'
 import type { Assumptions } from '../types/Assumptions.ts'
 import type { ValuationConfig } from '../types/ValuationConfig.ts'
 import { DEFAULT_VALUATION_CONFIG } from '../types/ValuationConfig.ts'
-import { fetchFinancialSummary, runPipeline, fetchPeerData } from '../services/financialFetcher.ts'
+import { fetchFinancialSummary, runPipeline, fetchPeerData, classifyError } from '../services/financialFetcher.ts'
 import { fetchForecastPresets } from '../services/forecastFetcher.ts'
 import { runAgent } from '../services/agentRunner.ts'
 import { computeForecast } from '../services/forecastEngine.ts'
@@ -221,22 +221,21 @@ export function useValuationRun() {
       })
 
     } catch (error) {
-      console.error('[ValuationRun] startRun failed:', error)
-      let errorMsg: string
+      let rawMsg: string
       if (error instanceof Error) {
-        errorMsg = error.message
-        if (error.stack) console.error('[ValuationRun] Stack:', error.stack)
+        rawMsg = error.message
       } else if (typeof error === 'string') {
-        errorMsg = error
+        rawMsg = error
       } else if (error && typeof error === 'object' && 'detail' in error) {
-        errorMsg = String((error as Record<string, unknown>).detail)
+        rawMsg = String((error as Record<string, unknown>).detail)
       } else {
         try {
-          errorMsg = `Unexpected error: ${JSON.stringify(error)}`
+          rawMsg = `Unexpected error: ${JSON.stringify(error)}`
         } catch {
-          errorMsg = `Unexpected error: ${String(error)}`
+          rawMsg = `Unexpected error: ${String(error)}`
         }
       }
+      const errorMsg = classifyError(rawMsg)
       addLogEntry({ status: 'error', text: errorMsg, timestamp: Date.now() })
       setRun(prev => prev ? { ...prev, status: 'error', error: errorMsg } : prev)
     }

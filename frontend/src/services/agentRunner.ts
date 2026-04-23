@@ -15,6 +15,7 @@ import {
 } from '../types/ValuationConfig.ts'
 import { validateAssumptions } from './assumptionValidator.ts'
 import { API_BASE } from '../utils/constants.ts'
+import { classifyError } from './financialFetcher.ts'
 
 export function parseAIRecommendedConfig(raw: Record<string, unknown> | undefined): AIRecommendedConfig | null {
   if (!raw) return null
@@ -150,7 +151,7 @@ export async function runAgent(
       const text = await response.text().catch(() => response.statusText)
       detail = text || response.statusText
     }
-    throw new Error(`Analysis failed: ${detail}`)
+    throw new Error(classifyError(detail))
   }
 
   if (!response.body) {
@@ -234,12 +235,13 @@ export async function runAgent(
             }
             assumptions = parsed
           } else if (event.type === 'error') {
+            const friendlyMsg = classifyError(event.message as string)
             onStep({
               status: 'error',
-              text: event.message,
+              text: friendlyMsg,
               timestamp: Date.now(),
             })
-            throw new Error(event.message)
+            throw new Error(friendlyMsg)
           }
         } catch (parseError) {
           // Skip malformed SSE lines

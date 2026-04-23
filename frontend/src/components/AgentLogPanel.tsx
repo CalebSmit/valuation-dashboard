@@ -70,7 +70,7 @@ export function AgentLogPanel({ entries, isActive, cached, usage }: AgentLogPane
         </div>
       </button>
       {!collapsed && (
-        <div ref={scrollRef} className="overflow-y-auto px-4 py-1 agent-log-scroll">
+        <div ref={scrollRef} className="overflow-y-auto overflow-x-hidden px-3 sm:px-4 py-1 agent-log-scroll">
           {entries.map((entry, i) => (
             <div
               key={i}
@@ -80,7 +80,7 @@ export function AgentLogPanel({ entries, isActive, cached, usage }: AgentLogPane
                 className="status-dot mt-1 flex-shrink-0"
                 data-status={entry.status}
               />
-              <span className={`text-xs leading-relaxed font-mono ${entry.status === 'error' ? 'clr-red' : 'clr-text'}`}>
+              <span className={`text-xs leading-relaxed font-mono break-words min-w-0 ${entry.status === 'error' ? 'clr-red' : 'clr-text'}`}>
                 {entry.text}
               </span>
             </div>
