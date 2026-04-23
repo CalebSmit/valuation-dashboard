@@ -1,14 +1,41 @@
 import type { CompsOutput } from '../types/CompsOutput.ts'
+import { UpsideLabel } from './UpsideLabel.tsx'
+import { CalcBreakdown } from './CalcBreakdown.tsx'
 import { formatCurrency, formatMultiple } from '../utils/formatters.ts'
 
 interface CompsTabProps {
   compsOutput: CompsOutput | null
+  currentPrice?: number | null
 }
 
-export function CompsTab({ compsOutput }: CompsTabProps) {
+export function CompsTab({ compsOutput, currentPrice }: CompsTabProps) {
   if (!compsOutput) {
     return <div className="p-4 font-mono text-sm clr-muted">No comparable company data available</div>
   }
+
+  // Build comps calculation breakdown
+  const appliedPrices = compsOutput.impliedPrices.filter(ip => ip.isApplicable && ip.impliedPrice !== null)
+  const compsBreakdown = compsOutput.weightedImpliedPrice !== null ? (
+    <span>
+      <span className="text-slate-400">Peer median multiples applied to subject company metrics:</span>
+      {appliedPrices.map((ip, i) => (
+        <span key={ip.multiple}>
+          {i > 0 ? ' | ' : ' '}
+          <span className="text-slate-400">{ip.multiple}:</span>{' '}
+          {ip.peerMedian !== null && (
+            <span className="text-slate-300">peer median {formatMultiple(ip.peerMedian)}</span>
+          )}
+          {' → '}
+          <span className="text-amber-400">{formatCurrency(ip.impliedPrice)}/share</span>
+        </span>
+      ))}
+      {' | '}
+      <span className="text-slate-400">Weighted average:</span>{' '}
+      <span className="text-green-300 font-semibold">{formatCurrency(compsOutput.weightedImpliedPrice)}/share</span>
+    </span>
+  ) : (
+    <span className="text-slate-400">No applicable multiples to display.</span>
+  )
 
   return (
     <div className="flex flex-col gap-5">
@@ -69,6 +96,12 @@ export function CompsTab({ compsOutput }: CompsTabProps) {
 
       {/* Implied Prices */}
       <div className="p-4 card">
+        {/* Prominent upside/downside label — first thing the eye sees */}
+        <UpsideLabel
+          impliedPrice={compsOutput.weightedImpliedPrice}
+          currentPrice={currentPrice ?? null}
+          modelName="Comps"
+        />
         <h4 className="text-xs uppercase tracking-wider mb-3 font-mono clr-muted">
           Implied Price by Multiple
         </h4>
@@ -106,6 +139,8 @@ export function CompsTab({ compsOutput }: CompsTabProps) {
             </span>
           </div>
         )}
+        {/* How this was calculated */}
+        <CalcBreakdown formula={compsBreakdown} />
       </div>
     </div>
   )

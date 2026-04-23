@@ -38,25 +38,43 @@ export function TickerInput({ onAnalyze, onLoadRun, recentRuns, disabled }: Tick
         </p>
       </div>
 
-      <div className="flex gap-3 items-center">
-        <input
-          type="text"
-          value={ticker}
-          onChange={e => { setTicker(e.target.value.toUpperCase()); setError('') }}
-          placeholder="TICKER"
-          maxLength={10}
-          disabled={disabled}
-          className="p-4 text-2xl text-center w-52 ticker-input"
-          onKeyDown={e => { if (e.key === 'Enter' && !disabled) handleSubmit() }}
-        />
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={disabled}
-          className="px-8 py-4 text-lg font-bold uppercase tracking-widest analyze-btn"
-        >
-          ANALYZE
-        </button>
+      <div className="flex flex-col items-center gap-1.5">
+        <div className="flex gap-3 items-center">
+          <input
+            type="text"
+            value={ticker}
+            onChange={e => { setTicker(e.target.value.toUpperCase()); setError('') }}
+            placeholder="TICKER"
+            maxLength={10}
+            disabled={disabled}
+            className="p-4 text-2xl text-center w-52 ticker-input"
+            onKeyDown={e => { if (e.key === 'Enter' && !disabled) handleSubmit() }}
+          />
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={disabled}
+            className="px-8 py-4 text-lg font-bold uppercase tracking-widest analyze-btn"
+          >
+            ANALYZE
+          </button>
+        </div>
+        <p className="text-xs font-mono text-gray-500">
+          e.g. try{' '}
+          {['AAPL', 'MSFT', 'NVDA'].map((t, i) => (
+            <span key={t}>
+              <button
+                type="button"
+                onClick={() => { setTicker(t); setError('') }}
+                disabled={disabled}
+                className="text-gray-400 hover:text-green-400 transition-colors underline underline-offset-2 cursor-pointer"
+              >
+                {t}
+              </button>
+              {i < 2 ? ', ' : ''}
+            </span>
+          ))}
+        </p>
       </div>
 
       {/* Research mode toggle */}

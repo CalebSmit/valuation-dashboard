@@ -208,6 +208,7 @@ export function ValuationTabs({
             financialData={mergedData}
             originalData={originalData}
             previousPrice={run.previousPrices?.dcf ?? null}
+            currentPrice={run.currentPrice ?? null}
             onOverride={onOverride}
             onDataOverride={onDataOverride}
             dcfConfig={dcfConfig}
@@ -221,12 +222,13 @@ export function ValuationTabs({
             assumptions={mergedAssumptions}
             currentDPS={mergedData?.annualDividendRate ?? null}
             originalDPS={originalData?.annualDividendRate ?? null}
+            currentPrice={run.currentPrice ?? null}
             onOverride={onOverride}
             onDataOverride={onDataOverride}
           />
         )}
         {activeTab === 'Comps' && (
-          <CompsTab compsOutput={run.compsOutput} />
+          <CompsTab compsOutput={run.compsOutput} currentPrice={run.currentPrice ?? null} />
         )}
         {activeTab === 'Scenarios' && (
           <ScenariosTab

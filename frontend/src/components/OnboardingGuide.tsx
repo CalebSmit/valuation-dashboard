@@ -10,15 +10,15 @@ const STEPS = [
   },
   {
     title: 'Enter A Ticker',
-    detail: 'Use the subject company ticker, including supported formats like BRK.B or 9988.HK.',
+    detail: 'Use the subject company ticker — e.g. try AAPL, MSFT, or NVDA — including supported formats like BRK.B or 9988.HK.',
   },
   {
     title: 'Run Analyze',
-    detail: 'The dashboard will refresh raw_data.xlsx, ask the agent for assumptions, and compute every model.',
+    detail: 'The dashboard fetches live financial data, asks the AI agent for valuation assumptions, and computes DCF, DDM, and Comps models automatically.',
   },
   {
     title: 'Review The Tabs',
-    detail: 'Check DCF, DDM, comps, scenarios, and exports after the run completes.',
+    detail: 'Check DCF, DDM, Comps, scenarios, and exports after the run completes. Each tab shows a color-coded upside/downside label vs. the current stock price.',
   },
 ] as const
 
@@ -31,7 +31,14 @@ export function OnboardingGuide({ hasApiKey, onOpenSettings }: OnboardingGuidePr
             <p className="onboarding-eyebrow">First-Time Setup</p>
             <h1 className="onboarding-title">Prepare the dashboard before your first valuation run.</h1>
             <p className="onboarding-copy">
-              The workflow is straightforward: connect a provider, analyze a ticker, then review and export the valuation output.
+              This tool is an AI-powered equity valuation dashboard. You type in a stock ticker
+              (e.g. <span className="font-semibold text-slate-200">AAPL</span>,{' '}
+              <span className="font-semibold text-slate-200">MSFT</span>, or{' '}
+              <span className="font-semibold text-slate-200">NVDA</span>), and the dashboard
+              automatically pulls live financial data, generates realistic valuation assumptions
+              using an AI agent, and runs three complementary models — Discounted Cash Flow (DCF),
+              Dividend Discount Model (DDM), and Comparable Company Analysis (Comps) — to estimate
+              what the stock is intrinsically worth relative to its current market price.
             </p>
           </div>
           <button

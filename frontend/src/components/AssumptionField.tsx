@@ -14,6 +14,8 @@ interface AssumptionFieldProps {
   correctionMessage?: string
   /** Which typical-range rule to apply (e.g. "wacc", "beta", "terminalGrowthRate", "ddmPayoutRatio"). */
   rangeRule?: string
+  /** Plain-English tooltip shown on hover — one sentence explaining what the number means and why it matters. */
+  tooltip?: string
 }
 
 function displayValue(value: number, format: string): string {
@@ -47,6 +49,7 @@ export function AssumptionField({
   max,
   correctionMessage,
   rangeRule,
+  tooltip,
 }: AssumptionFieldProps) {
   const [editing, setEditing] = useState(false)
   const [inputVal, setInputVal] = useState(displayValue(assumption.value, format))
@@ -75,9 +78,27 @@ export function AssumptionField({
   return (
     <div className="flex flex-col py-1.5">
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-xs assumption-label">
-          {label}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-xs assumption-label">
+            {label}
+          </span>
+          {tooltip && (
+            <span className="relative group inline-flex items-center">
+              <span
+                aria-label={`Explanation: ${label}`}
+                className="flex items-center justify-center w-3.5 h-3.5 text-[9px] rounded-full border border-gray-600 text-gray-400 cursor-help select-none leading-none flex-shrink-0"
+              >
+                ?
+              </span>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-0 top-full mt-1.5 w-64 rounded-md bg-slate-900/95 text-slate-100 text-[11px] font-sans px-3 py-2 shadow-lg border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-30 leading-relaxed"
+              >
+                {tooltip}
+              </span>
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {editing ? (
             <div className="flex items-center gap-1">
