@@ -51,4 +51,9 @@ export interface ValuationRun {
 
   /** Per-field auto-correction messages from the assumption validator (path → message). */
   fieldCorrections?: Record<string, string>
+
+  /** True if the analysis was served from the same-day server-side cache. */
+  cached?: boolean
+  /** Anthropic usage tokens for the live run (zero for cache hits). */
+  usage?: { input_tokens: number; output_tokens: number } | null
 }

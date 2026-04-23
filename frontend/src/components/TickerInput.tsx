@@ -77,6 +77,21 @@ export function TickerInput({ onAnalyze, onLoadRun, recentRuns, disabled }: Tick
           <span className="research-btn-dot" />
           Deep Research (~$0.05)
         </button>
+        <span className="relative group inline-flex items-center">
+          <span
+            aria-label="Mode cost comparison"
+            className="flex items-center justify-center w-5 h-5 text-[11px] rounded-full border border-gray-500 text-gray-300 cursor-help select-none"
+          >
+            i
+          </span>
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-2 whitespace-nowrap rounded-md bg-slate-900/95 text-slate-100 text-[11px] font-mono px-3 py-2 shadow-lg border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-20"
+          >
+            <span className="block">Standard Mode: ~$0.02–0.04 per run</span>
+            <span className="block">Deep Research Mode: ~$0.08–0.15 per run</span>
+          </span>
+        </span>
       </div>
 
       {error && (

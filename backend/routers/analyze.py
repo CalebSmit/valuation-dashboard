@@ -139,6 +139,11 @@ async def analyze_ticker(ticker: str, request: AnalyzeRequest):
         # Step 1: Return cached assumptions when available.
         if cached_assumptions:
             yield _sse("step", "Found cached analysis from today")
+            cached_assumptions["_meta"] = {
+                "cached": True,
+                "usage": cached_assumptions.get("_usage") or {"input_tokens": 0, "output_tokens": 0},
+            }
+            cached_assumptions.pop("_usage", None)
             yield _sse("result", cached_assumptions)
             return
 
@@ -214,6 +219,8 @@ async def analyze_ticker(ticker: str, request: AnalyzeRequest):
                     yield _sse("step", data)
                 elif kind == "result":
                     _save_cache(ticker, data, request.provider, request.deep_research)
+                    usage = data.pop("_usage", None) or {"input_tokens": 0, "output_tokens": 0}
+                    data["_meta"] = {"cached": False, "usage": usage}
                     yield _sse("step", "Assumptions generated with citations")
                     yield _sse("result", data)
                     return
@@ -233,6 +240,8 @@ async def analyze_ticker(ticker: str, request: AnalyzeRequest):
                 yield _sse("step", data)
             elif kind == "result":
                 _save_cache(ticker, data, request.provider, request.deep_research)
+                usage = data.pop("_usage", None) or {"input_tokens": 0, "output_tokens": 0}
+                data["_meta"] = {"cached": False, "usage": usage}
                 yield _sse("step", "Assumptions generated with citations")
                 yield _sse("result", data)
                 return

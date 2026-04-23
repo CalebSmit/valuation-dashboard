@@ -63,6 +63,8 @@ export interface AgentResult {
   assumptions: Assumptions
   aiConfig: AIRecommendedConfig | null
   fieldCorrections: Record<string, string>
+  cached: boolean
+  usage: { input_tokens: number; output_tokens: number } | null
 }
 
 function normalizeForecast(rawForecast: unknown): { forecast: Assumptions['forecast']; missingFields: string[] } {
@@ -161,6 +163,8 @@ export async function runAgent(
   let buffer = ''
   let assumptions: Assumptions | null = null
   let rawValuationConfig: Record<string, unknown> | undefined
+  let cached = false
+  let usage: { input_tokens: number; output_tokens: number } | null = null
 
   try {
     while (true) {
@@ -208,6 +212,16 @@ export async function runAgent(
             }
 
             rawValuationConfig = data.valuation_config as Record<string, unknown> | undefined
+            const meta = data._meta as { cached?: boolean; usage?: { input_tokens?: number; output_tokens?: number } } | undefined
+            if (meta) {
+              cached = !!meta.cached
+              if (meta.usage) {
+                usage = {
+                  input_tokens: meta.usage.input_tokens ?? 0,
+                  output_tokens: meta.usage.output_tokens ?? 0,
+                }
+              }
+            }
             const parsed = data as unknown as Assumptions
             const normalizedForecast = normalizeForecast((data as Record<string, unknown>).forecast)
             parsed.forecast = normalizedForecast.forecast
@@ -265,5 +279,7 @@ export async function runAgent(
     assumptions: corrected,
     aiConfig: parseAIRecommendedConfig(rawValuationConfig),
     fieldCorrections,
+    cached,
+    usage,
   }
 }

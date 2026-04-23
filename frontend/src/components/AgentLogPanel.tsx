@@ -4,9 +4,29 @@ import type { AgentLogEntry } from '../types/ValuationRun.ts'
 interface AgentLogPanelProps {
   entries: AgentLogEntry[]
   isActive: boolean
+  cached?: boolean
+  usage?: { input_tokens: number; output_tokens: number } | null
 }
 
-export function AgentLogPanel({ entries, isActive }: AgentLogPanelProps) {
+// Claude 3.5 Sonnet pricing (per 1M tokens)
+const INPUT_PRICE_PER_MTOK = 3.0
+const OUTPUT_PRICE_PER_MTOK = 15.0
+
+function formatCostUSD(cost: number): string {
+  if (cost <= 0) return '$0'
+  // Round to 3 significant figures
+  const magnitude = Math.pow(10, 2 - Math.floor(Math.log10(cost)))
+  const rounded = Math.round(cost * magnitude) / magnitude
+  // Show at least 3 decimals for typical small costs
+  const decimals = cost < 0.01 ? 4 : cost < 0.1 ? 3 : 2
+  return `$${rounded.toFixed(decimals)}`
+}
+
+function formatTokens(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
+export function AgentLogPanel({ entries, isActive, cached, usage }: AgentLogPanelProps) {
   const [collapsed, setCollapsed] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevCountRef = useRef(entries.length)
@@ -65,6 +85,17 @@ export function AgentLogPanel({ entries, isActive }: AgentLogPanelProps) {
               </span>
             </div>
           ))}
+          {!cached && usage && (usage.input_tokens > 0 || usage.output_tokens > 0) && (() => {
+            const totalTokens = usage.input_tokens + usage.output_tokens
+            const cost =
+              (usage.input_tokens / 1_000_000) * INPUT_PRICE_PER_MTOK +
+              (usage.output_tokens / 1_000_000) * OUTPUT_PRICE_PER_MTOK
+            return (
+              <div className="mt-2 pt-2 border-t border-gray-700 text-[10px] font-mono clr-muted">
+                ~{formatCostUSD(cost)} — {formatTokens(totalTokens)} tokens
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>

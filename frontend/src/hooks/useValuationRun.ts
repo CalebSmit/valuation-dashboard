@@ -128,6 +128,8 @@ export function useValuationRun() {
       const assumptions: Assumptions = agentResult.assumptions
       const aiRecommendedConfig = agentResult.aiConfig
       const fieldCorrections = agentResult.fieldCorrections
+      const cached = agentResult.cached
+      const usage = agentResult.usage
 
       // Step 2b: Fetch peer data based on AI's selected peers
       const selectedPeers = assumptions.comps?.selected_peers ?? []
@@ -200,6 +202,8 @@ export function useValuationRun() {
         status: 'complete',
         agentLog: [], // Will be set by setRun
         fieldCorrections,
+        cached,
+        usage,
       }
 
       setRun(prev => ({

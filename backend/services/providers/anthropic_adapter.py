@@ -183,7 +183,7 @@ class AnthropicAdapter:
             try:
                 response = client.messages.create(
                     model="claude-sonnet-4-20250514",
-                    max_tokens=2500,
+                    max_tokens=3000,
                     system=SYSTEM_PROMPT,
                     messages=messages,
                     tools=[ASSUMPTIONS_TOOL],
@@ -192,6 +192,9 @@ class AnthropicAdapter:
             except anthropic.RateLimitError as e:
                 raise ValueError(_format_rate_limit_error(e)) from e
 
+            input_tokens = getattr(response.usage, "input_tokens", 0) if getattr(response, "usage", None) else 0
+            output_tokens = getattr(response.usage, "output_tokens", 0) if getattr(response, "usage", None) else 0
+
             for block in response.content:
                 if block.type == "tool_use" and block.name == "set_valuation_assumptions":
                     if on_step:
@@ -199,7 +202,16 @@ class AnthropicAdapter:
                     initial = dict(block.input)
                     if historical_ratios:
                         messages.append({"role": "assistant", "content": _assistant_text_only(response.content)})
-                        return self._sync_self_review(client, SYSTEM_PROMPT, messages, initial, historical_ratios, [], on_step)
+                        reviewed = self._sync_self_review(client, SYSTEM_PROMPT, messages, initial, historical_ratios, [], on_step)
+                        reviewed["_usage"] = {
+                            "input_tokens": input_tokens,
+                            "output_tokens": output_tokens,
+                        }
+                        return reviewed
+                    initial["_usage"] = {
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                    }
                     return initial
 
             raise ValueError("Claude did not return structured assumptions")
@@ -243,6 +255,8 @@ class AnthropicAdapter:
                 on_step("Starting deep research with web search...")
 
             messages: list[dict[str, Any]] = [{"role": "user", "content": user_message}]
+            cum_input_tokens = 0
+            cum_output_tokens = 0
 
             for turn in range(4):
                 if on_step and turn > 0:
@@ -260,6 +274,10 @@ class AnthropicAdapter:
                 except anthropic.RateLimitError as e:
                     raise ValueError(_format_rate_limit_error(e)) from e
 
+                if getattr(response, "usage", None):
+                    cum_input_tokens += getattr(response.usage, "input_tokens", 0) or 0
+                    cum_output_tokens += getattr(response.usage, "output_tokens", 0) or 0
+
                 for block in response.content:
                     if hasattr(block, 'type') and block.type == "tool_use" and block.name == "set_valuation_assumptions":
                         if on_step:
@@ -267,7 +285,16 @@ class AnthropicAdapter:
                         initial = dict(block.input)
                         if historical_ratios:
                             messages.append({"role": "assistant", "content": _assistant_text_only(response.content)})
-                            return self._sync_self_review(client, full_system, messages, initial, historical_ratios, [web_search_tool], on_step)
+                            reviewed = self._sync_self_review(client, full_system, messages, initial, historical_ratios, [web_search_tool], on_step)
+                            reviewed["_usage"] = {
+                                "input_tokens": cum_input_tokens,
+                                "output_tokens": cum_output_tokens,
+                            }
+                            return reviewed
+                        initial["_usage"] = {
+                            "input_tokens": cum_input_tokens,
+                            "output_tokens": cum_output_tokens,
+                        }
                         return initial
 
                 for block in response.content:

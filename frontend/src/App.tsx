@@ -153,6 +153,14 @@ function App() {
                 <div>
                   <h1 className="text-xl font-bold ticker-title">
                     {run.ticker}
+                    {run.cached && (
+                      <span
+                        title="Served from same-day server cache"
+                        className="ml-2 inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-600/40 text-slate-200 align-middle"
+                      >
+                        Cached
+                      </span>
+                    )}
                     <span className="ml-2 font-normal text-sm ticker-company">
                       {run.companyName}
                     </span>
@@ -254,6 +262,8 @@ function App() {
               <AgentLogPanel
                 entries={run.agentLog}
                 isActive={isRunning || (run.status === 'complete' && run.agentLog.length > 0)}
+                cached={run.cached}
+                usage={run.usage}
               />
             </div>
           </div>
