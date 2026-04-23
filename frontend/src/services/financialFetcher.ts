@@ -185,6 +185,7 @@ export async function runPipeline(
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let completed = false
 
   try {
     while (true) {
@@ -210,6 +211,7 @@ export async function runPipeline(
               timestamp: Date.now(),
             })
           } else if (event.type === 'pipeline_complete') {
+            completed = true
             onStep({
               status: 'done',
               text: event.message,
@@ -228,6 +230,13 @@ export async function runPipeline(
           throw parseError
         }
       }
+    }
+
+    // If the stream ended without a pipeline_complete event, the server was
+    // killed mid-run (e.g. Render free-tier restart). Treat as failure so we
+    // don't silently proceed to analyze with missing data.
+    if (!completed) {
+      throw new Error('Pipeline was interrupted — the server restarted mid-run. Please try again.')
     }
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
