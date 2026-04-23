@@ -70,6 +70,16 @@ export function classifyError(raw: string): string {
     return 'A data pipeline is already running. Please wait for it to finish, then try again.'
   }
 
+  // Yahoo Finance / yfinance rate limit (during pipeline phase — before AI is called)
+  if (
+    lower.includes('pipeline failed') ||
+    lower.includes('pipeline failed:') ||
+    (lower.includes('429') && (lower.includes('yahoo') || lower.includes('yfinance') || lower.includes('pipeline'))) ||
+    (lower.includes('too many requests') && !lower.includes('anthropic'))
+  ) {
+    return 'Yahoo Finance is rate limiting — wait 30 seconds and click Analyze again.'
+  }
+
   // Anthropic / AI provider rate limit
   if (
     lower.includes('rate limit') ||
@@ -79,7 +89,7 @@ export function classifyError(raw: string): string {
     lower.includes('overloaded') ||
     lower.includes('try after a while')
   ) {
-    return 'Rate limited. The AI API is busy — wait 60–90 seconds and click Analyze again.'
+    return 'Rate limited — wait 60–90 seconds and click Analyze again.'
   }
 
   return raw

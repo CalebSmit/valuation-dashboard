@@ -64,7 +64,7 @@ export const UI = {
   exportPdfButton: 'EXPORT TO PDF',
   tickerPlaceholder: 'Enter ticker (e.g., AAPL)',
   apiKeyPlaceholder: 'Enter Anthropic API key (sk-ant-...)',
-  noDataMessage: 'Run the Python pipeline first (py main.py) to generate financial data.',
+  noDataMessage: 'Enter a ticker and click Analyze to fetch financial data automatically.',
   tabs: {
     overview: 'Overview',
     dcf: 'DCF',

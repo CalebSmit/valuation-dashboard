@@ -88,15 +88,15 @@ export function useValuationRun() {
           timestamp: Date.now(),
         })
       } else {
-        // Step 0: Run the data pipeline (py main.py)
-        addLogEntry({ status: 'running', text: `Running data pipeline for ${ticker}...`, timestamp: Date.now() })
+        // Step 0: Run the data pipeline (fetches yfinance + FRED data)
+        addLogEntry({ status: 'running', text: `Fetching financial data for ${ticker}...`, timestamp: Date.now() })
         await runPipeline(ticker, addLogEntry, fredApiKey)
       }
 
       setStatus('fetching')
 
       // Step 1: Always fetch financial summary for freshness
-      addLogEntry({ status: 'running', text: 'Loading financial summary from raw_data.xlsx...', timestamp: Date.now() })
+      addLogEntry({ status: 'running', text: 'Loading financial summary...', timestamp: Date.now() })
       financialData = await fetchFinancialSummary()
       addLogEntry({ status: 'done', text: `Loaded data for ${financialData.companyName}`, timestamp: Date.now() })
 
