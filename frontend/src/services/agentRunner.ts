@@ -123,10 +123,19 @@ export async function runAgent(
 
   let response: Response
   try {
+    // The API key travels in an Authorization: Bearer header so it never
+    // appears in JSON request bodies (where FastAPI's default 422 handler
+    // would echo it back) or in any backend access logs that record the
+    // body. The body carries only non-sensitive provider/mode flags.
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const trimmedKey = apiKey?.trim()
+    if (trimmedKey) {
+      headers.Authorization = `Bearer ${trimmedKey}`
+    }
     response = await fetch(`${API_BASE}/api/analyze/${encodeURIComponent(ticker)}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: apiKey, provider, deep_research: deepResearch }),
+      headers,
+      body: JSON.stringify({ provider, deep_research: deepResearch }),
       signal: controller.signal,
     })
   } catch (error) {

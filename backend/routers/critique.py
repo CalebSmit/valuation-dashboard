@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 
 from config import PROVIDER_API_KEYS
 from models.critique import CritiqueRequest, CritiqueReport, RefineRequest, RefineResponse
@@ -11,6 +11,15 @@ from services.critique_engine import run_critique
 from services.refine_engine import refine_assumptions
 
 router = APIRouter(tags=["critique"])
+
+
+def _bearer(authorization: str | None) -> str:
+    if not authorization:
+        return ""
+    value = authorization.strip()
+    if value.lower().startswith("bearer "):
+        return value[7:].strip()
+    return value
 
 
 @router.post("/critique", response_model=CritiqueReport)
@@ -32,13 +41,17 @@ async def critique_valuation(req: CritiqueRequest) -> CritiqueReport:
 
 
 @router.post("/refine", response_model=RefineResponse)
-async def refine_valuation(req: RefineRequest) -> RefineResponse:
+async def refine_valuation(
+    req: RefineRequest,
+    authorization: str | None = Header(default=None),
+) -> RefineResponse:
     """Use Claude Haiku to auto-fix assumptions that failed CFA critique checks.
 
     Sends only the failing issues + assumptions (not the full 18K financial
     summary) so cost is minimal (~$0.001-0.003 per refinement call).
     """
-    api_key = req.api_key or PROVIDER_API_KEYS.get("anthropic", "")
+    header_key = _bearer(authorization)
+    api_key = header_key or req.api_key or PROVIDER_API_KEYS.get("anthropic", "")
     revised, changes, rationale = refine_assumptions(
         ticker=req.ticker,
         assumptions=req.assumptions,

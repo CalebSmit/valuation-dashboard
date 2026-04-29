@@ -110,15 +110,21 @@ export function useCritique(run: ValuationRun | null): UseCritiqueResult {
       setRefineChanges([])
 
       try {
+        // API key travels in an Authorization header so it stays out of
+        // request bodies / FastAPI 422 echoes / access logs.
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        const trimmedKey = apiKey?.trim()
+        if (trimmedKey) {
+          headers.Authorization = `Bearer ${trimmedKey}`
+        }
         const res = await fetch(`${API_BASE}/api/refine`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             ticker: run.ticker,
             assumptions: run.assumptions,
             issues: actionableIssues,
             financial_data: run.financialData,
-            api_key: apiKey,
             provider,
           }),
         })

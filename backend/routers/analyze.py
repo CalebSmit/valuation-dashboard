@@ -14,7 +14,7 @@ import queue as thread_queue
 from datetime import date
 from copy import deepcopy
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
 from config import PROVIDER_API_KEYS, RAW_DATA_PATH
@@ -77,8 +77,12 @@ def _load_cached(ticker: str, provider: str = "anthropic", deep: bool = False) -
 
 def _save_cache(ticker: str, assumptions: dict, provider: str = "anthropic", deep: bool = False) -> None:
     cache_path = _get_cache_path(ticker, provider, deep)
-    with open(cache_path, "w") as f:
+    # Atomic write: a Render OOM kill mid-write would otherwise leave a
+    # truncated JSON file that poisons the cache for the rest of the day.
+    tmp_path = f"{cache_path}.tmp"
+    with open(tmp_path, "w") as f:
         json.dump(assumptions, f, indent=2)
+    os.replace(tmp_path, cache_path)
 
 
 def _patch_forecast(cached: dict) -> dict:
@@ -101,13 +105,31 @@ def _patch_forecast(cached: dict) -> dict:
     return cached
 
 
+def _extract_bearer(authorization: str | None) -> str:
+    """Pull a bearer token out of an Authorization header, tolerantly."""
+    if not authorization:
+        return ""
+    value = authorization.strip()
+    if value.lower().startswith("bearer "):
+        return value[7:].strip()
+    return value
+
+
 @router.post("/analyze/{ticker}")
-async def analyze_ticker(ticker: str, request: AnalyzeRequest):
+async def analyze_ticker(
+    ticker: str,
+    request: AnalyzeRequest,
+    authorization: str | None = Header(default=None),
+):
     ticker = normalize_ticker(ticker)
     if not is_valid_ticker(ticker):
         raise HTTPException(status_code=400, detail="Invalid ticker format")
 
-    resolved_api_key = (request.api_key or "").strip() or PROVIDER_API_KEYS.get(request.provider, "")
+    # Prefer the Authorization header so the key never lives in the JSON body.
+    # `request.api_key` is the legacy fallback for older clients only.
+    header_key = _extract_bearer(authorization)
+    body_key = (request.api_key or "").strip()
+    resolved_api_key = header_key or body_key or PROVIDER_API_KEYS.get(request.provider, "")
 
     # Prefer cache-first behavior for same-day reruns. If fresh cache is available,
     # serve it even without an API key to support fast, deterministic re-analysis.

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, date
@@ -23,8 +24,14 @@ import requests
 import yfinance as yf
 
 from config import RAW_DATA_PATH
+from services.pipeline_lock import PipelineLock
 
 _YF_DELAY = 0.4   # seconds between yfinance calls — avoids Yahoo 429s
+
+# File-based mutex on the persistent data volume so the lock survives
+# Render restarts and coordinates across multiple worker instances that
+# share the same /data mount. See services/pipeline_lock.py.
+_PIPELINE_LOCK = PipelineLock(RAW_DATA_PATH.parent / ".pipeline.lock")
 
 
 def _yf_call_with_retry(fn, retries: int = 3, delay: float = 3.0):
@@ -46,29 +53,15 @@ from services.ticker_validation import is_valid_ticker, normalize_ticker
 
 PIPELINE_TIMEOUT = 600  # seconds — kept for API compat
 
-# Pipeline lock with timestamp to prevent permanent lock after Render restart
-_pipeline_running = False
-_pipeline_started_at: float | None = None
-# If _pipeline_running has been True for longer than this, auto-reset the lock.
-# Set slightly above PIPELINE_TIMEOUT so a genuinely-running pipeline never
-# gets prematurely cleared, but a stale lock from a crashed instance does.
-_PIPELINE_LOCK_TIMEOUT = 12 * 60  # 12 minutes
-
 
 def is_pipeline_running() -> bool:
     """Check if the data pipeline is currently executing.
 
-    Auto-resets the lock if it has been held for more than _PIPELINE_LOCK_TIMEOUT
-    seconds (handles Render instance restart mid-run).
+    Backed by a file lock on the persistent data volume so the answer
+    is consistent across Render workers and survives crashes (the lock
+    auto-expires after the stale-after window inside PipelineLock).
     """
-    import time
-    global _pipeline_running, _pipeline_started_at
-    if _pipeline_running and _pipeline_started_at is not None:
-        if time.monotonic() - _pipeline_started_at > _PIPELINE_LOCK_TIMEOUT:
-            # Stale lock — reset so new runs are not blocked indefinitely
-            _pipeline_running = False
-            _pipeline_started_at = None
-    return _pipeline_running
+    return _PIPELINE_LOCK.is_held()
 
 
 class PipelineError(Exception):
@@ -521,13 +514,27 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
 
     RAW_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    with pd.ExcelWriter(str(RAW_DATA_PATH), engine="openpyxl") as writer:
-        for sheet_name, df in sheet_map.items():
-            if df is not None and not df.empty:
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-            else:
-                # Write an empty placeholder so the sheet exists (avoids KeyErrors in readers)
-                pd.DataFrame({"_empty": []}).to_excel(writer, sheet_name=sheet_name, index=False)
+    # Write to a sibling temp file then os.replace() atomically. Readers
+    # (excel_reader, financial_summarizer) use mtime-based caching, so a
+    # half-written workbook would otherwise be served as if it were valid.
+    tmp_path = RAW_DATA_PATH.with_suffix(RAW_DATA_PATH.suffix + ".tmp")
+    try:
+        with pd.ExcelWriter(str(tmp_path), engine="openpyxl") as writer:
+            for sheet_name, df in sheet_map.items():
+                if df is not None and not df.empty:
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+                else:
+                    # Write an empty placeholder so the sheet exists (avoids KeyErrors in readers)
+                    pd.DataFrame({"_empty": []}).to_excel(writer, sheet_name=sheet_name, index=False)
+        os.replace(tmp_path, RAW_DATA_PATH)
+    except Exception:
+        # Best-effort cleanup of the partial temp file before re-raising
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
+        raise
 
     progress_cb(f"[10/10] Pipeline complete — raw_data.xlsx written ({len(sheet_map)} sheets)")
 
@@ -539,20 +546,15 @@ async def run_pipeline(ticker: str, fred_api_key: str | None = None) -> AsyncGen
     fred_api_key is accepted for API compatibility but not required —
     FRED data is fetched from the public CSV endpoint.
     """
-    global _pipeline_running
-
-    if _pipeline_running:
-        raise PipelineError("Pipeline is already running. Wait for it to finish.")
-
     clean_ticker = normalize_ticker(ticker)
     if not is_valid_ticker(clean_ticker):
         raise PipelineError(f"Invalid ticker format: '{ticker}'")
 
+    if not _PIPELINE_LOCK.acquire():
+        raise PipelineError("Pipeline is already running. Wait for it to finish.")
+
     yield f"Starting pipeline for {clean_ticker}..."
 
-    import time
-    _pipeline_running = True
-    _pipeline_started_at = time.monotonic()
     messages: list[str] = []
     error: list[Exception] = []
 
@@ -591,5 +593,4 @@ async def run_pipeline(ticker: str, fred_api_key: str | None = None) -> AsyncGen
     except Exception as exc:
         raise PipelineError(f"Pipeline failed: {exc}") from exc
     finally:
-        _pipeline_running = False
-        _pipeline_started_at = None
+        _PIPELINE_LOCK.release()

@@ -26,6 +26,11 @@ class FinancialSummaryResponse(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
+    # API key intentionally omitted from the body — clients send it in an
+    # `Authorization: Bearer <key>` header instead so it never lands in
+    # request-body logs or 422 validation echoes. The legacy `api_key`
+    # field is accepted for backward compatibility with any older client
+    # that has not been updated yet, but new clients MUST use the header.
     api_key: str | None = None
     provider: str = "anthropic"  # "anthropic" | "perplexity" | "gemini"
     deep_research: bool = False
