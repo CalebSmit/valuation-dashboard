@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Any
 
 import anthropic
@@ -98,12 +99,74 @@ def _summary_json(summary: dict[str, Any], max_chars: int) -> str:
 
 
 def _format_rate_limit_error(error: Exception) -> str:
-    """Return a user-friendly Anthropic rate limit message."""
+    """Return a user-friendly Anthropic rate limit message.
+
+    Logs the underlying detail so we can diagnose which bucket tripped
+    (ITPM, OTPM, RPM, or overload) without exposing it to the user.
+    """
+    raw = str(error) if error else ""
+    logger.warning("[ANTHROPIC RATE LIMIT] %s", raw)
     return (
         "Too Many Requests. Rate limited. "
         "Anthropic's API is temporarily over capacity. "
         "Wait 60-90 seconds and try again."
     )
+
+
+def _retry_after_seconds(error: Exception, default: float = 5.0) -> float:
+    """Pull a Retry-After hint from an Anthropic RateLimitError, if present."""
+    response = getattr(error, "response", None)
+    if response is not None:
+        headers = getattr(response, "headers", None)
+        if headers is not None:
+            for key in ("retry-after", "Retry-After"):
+                value = headers.get(key) if hasattr(headers, "get") else None
+                if value:
+                    try:
+                        return float(value)
+                    except (TypeError, ValueError):
+                        pass
+    return default
+
+
+def _create_with_rate_limit_retry(
+    client: anthropic.Anthropic,
+    on_step: Any = None,
+    label: str = "Claude",
+    *,
+    max_attempts: int = 4,
+    cap_seconds: float = 35.0,
+    **create_kwargs: Any,
+) -> Any:
+    """Call client.messages.create with bounded retry on RateLimitError.
+
+    Anthropic 429s are nearly always transient — input-tokens-per-minute
+    or requests-per-minute buckets that refill within 30 seconds. The
+    SSE connection is kept alive separately by the analyze.py keepalive
+    loop, so a 30s wait inside this thread is safe.
+
+    We retry up to 4 times with exponential backoff, honoring the
+    server-supplied Retry-After header when present. On final failure
+    we re-raise RateLimitError so the caller's existing handler runs.
+    """
+    last_error: anthropic.RateLimitError | None = None
+    for attempt in range(max_attempts):
+        try:
+            return client.messages.create(**create_kwargs)
+        except anthropic.RateLimitError as exc:
+            last_error = exc
+            if attempt == max_attempts - 1:
+                break
+            wait = min(_retry_after_seconds(exc, default=4.0 * (2 ** attempt)), cap_seconds)
+            logger.warning(
+                "[ANTHROPIC RETRY] %s rate-limited (attempt %d/%d), waiting %.1fs",
+                label, attempt + 1, max_attempts, wait,
+            )
+            if on_step:
+                on_step(f"{label} is busy — waiting {int(wait)}s and retrying…")
+            time.sleep(wait)
+    assert last_error is not None
+    raise last_error
 
 
 def _format_auth_error(error: Exception) -> str:
@@ -175,7 +238,11 @@ class AnthropicAdapter:
         )
 
         try:
-            response = client.messages.create(
+            response = _create_with_rate_limit_retry(
+                client,
+                on_step=on_step,
+                label="Claude self-review",
+                max_attempts=3,
                 model=MODEL_SELF_REVIEW,
                 max_tokens=4096,
                 system=(
@@ -190,7 +257,16 @@ class AnthropicAdapter:
         except anthropic.AuthenticationError as e:
             raise ValueError(_format_auth_error(e)) from e
         except anthropic.RateLimitError as e:
-            raise ValueError(_format_rate_limit_error(e)) from e
+            # Self-review is a quality enhancement, not a hard requirement.
+            # If the second Haiku call after the assumption-generation
+            # call gets rate-limited, fall back to the original initial
+            # assumptions instead of failing the whole run. The user
+            # still gets a complete valuation; we just skip the
+            # consistency check.
+            logger.warning("[ANTHROPIC SELF-REVIEW SKIPPED] rate-limited: %s", e)
+            if on_step:
+                on_step("Self-review skipped (rate limit) — using initial assumptions")
+            return initial
 
         _REQUIRED = {"dcf", "wacc", "ddm", "comps", "scenarios", "forecast", "investment_thesis", "key_risks"}
 
@@ -234,7 +310,10 @@ class AnthropicAdapter:
             }]
 
             try:
-                response = client.messages.create(
+                response = _create_with_rate_limit_retry(
+                    client,
+                    on_step=on_step,
+                    label="Claude (Haiku)",
                     model=MODEL_STANDARD,  # Haiku: high rate limits, much cheaper than Sonnet
                     max_tokens=3000,
                     system=SYSTEM_PROMPT,
@@ -320,8 +399,12 @@ class AnthropicAdapter:
                     on_step(f"Research turn {turn + 1}...")
 
                 try:
-                    response = client.messages.create(
-                        model=MODEL_DEEP_RESEARCH,  # Sonnet: kept for deep research multi-turn web reasoning
+                    response = _create_with_rate_limit_retry(
+                        client,
+                        on_step=on_step,
+                        label=f"Claude Sonnet (deep research turn {turn + 1})",
+                        max_attempts=3,
+                        model=MODEL_DEEP_RESEARCH,
                         max_tokens=5000,
                         system=full_system,
                         messages=messages,
