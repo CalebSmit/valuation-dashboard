@@ -615,10 +615,19 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
 
     RAW_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write to a sibling temp file then os.replace() atomically. Readers
+    # Write to a sibling temp path then os.replace() atomically. Readers
     # (excel_reader, financial_summarizer) use mtime-based caching, so a
     # half-written workbook would otherwise be served as if it were valid.
-    tmp_path = RAW_DATA_PATH.with_suffix(RAW_DATA_PATH.suffix + ".tmp")
+    #
+    # The temp path MUST keep the .xlsx extension — pandas / openpyxl
+    # auto-detects the engine from the suffix and rejects unknown ones
+    # ("Invalid extension for engine …: 'tmp'"). Using a unique sibling
+    # filename like raw_data.xlsx.writing-<pid>.xlsx satisfies both
+    # requirements: same parent dir (so os.replace stays atomic on the
+    # same filesystem) and a recognized extension.
+    tmp_path = RAW_DATA_PATH.with_name(
+        f"{RAW_DATA_PATH.stem}.writing-{os.getpid()}{RAW_DATA_PATH.suffix}"
+    )
     try:
         with pd.ExcelWriter(str(tmp_path), engine="openpyxl") as writer:
             for sheet_name, df in sheet_map.items():
