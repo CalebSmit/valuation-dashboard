@@ -134,11 +134,21 @@ export function useValuationRun() {
       // Step 2b: Fetch peer data based on AI's selected peers
       const selectedPeers = assumptions.comps?.selected_peers ?? []
       let enrichedData = financialData
+      let failedPeerTickers: string[] = []
       if (selectedPeers.length > 0) {
         addLogEntry({ status: 'running', text: `Fetching data for peers: ${selectedPeers.join(', ')}...`, timestamp: Date.now() })
-        const peerData = await fetchPeerData(selectedPeers)
-        enrichedData = { ...financialData, competitors: peerData }
-        addLogEntry({ status: 'done', text: `Loaded ${peerData.length} peer companies`, timestamp: Date.now() })
+        const peerResult = await fetchPeerData(selectedPeers)
+        enrichedData = { ...financialData, competitors: peerResult.peers }
+        failedPeerTickers = peerResult.failedTickers
+        if (peerResult.failedTickers.length > 0) {
+          addLogEntry({
+            status: 'running',
+            text: `Loaded ${peerResult.peers.length} of ${selectedPeers.length} peers (skipped: ${peerResult.failedTickers.join(', ')})`,
+            timestamp: Date.now(),
+          })
+        } else {
+          addLogEntry({ status: 'done', text: `Loaded ${peerResult.peers.length} peer companies`, timestamp: Date.now() })
+        }
       }
 
       setRun(prev => prev ? { ...prev, assumptions, financialData: enrichedData, status: 'calculating' } : prev)
@@ -168,7 +178,10 @@ export function useValuationRun() {
       })
 
       addLogEntry({ status: 'running', text: 'Computing comparable company analysis...', timestamp: Date.now() })
-      const compsOutput = computeComps(enrichedData, enrichedData.competitors, assumptions.comps)
+      const compsBase = computeComps(enrichedData, enrichedData.competitors, assumptions.comps)
+      const compsOutput = failedPeerTickers.length > 0
+        ? { ...compsBase, failedPeers: failedPeerTickers.length }
+        : compsBase
       addLogEntry({ status: 'done', text: `Comps weighted price: $${compsOutput.weightedImpliedPrice?.toFixed(2) ?? 'N/A'}`, timestamp: Date.now() })
 
       addLogEntry({ status: 'running', text: 'Building Bear/Base/Bull scenarios...', timestamp: Date.now() })

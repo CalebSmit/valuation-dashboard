@@ -248,17 +248,25 @@ export async function runPipeline(
   }
 }
 
-export async function fetchPeerData(tickers: string[]): Promise<CompetitorData[]> {
-  if (tickers.length === 0) return []
+export interface PeerFetchResult {
+  peers: CompetitorData[]
+  failedTickers: string[]
+}
+
+export async function fetchPeerData(tickers: string[]): Promise<PeerFetchResult> {
+  if (tickers.length === 0) return { peers: [], failedTickers: [] }
   const response = await fetch(
     `${API_BASE}/api/peers?tickers=${tickers.map(encodeURIComponent).join(',')}`
   )
   if (!response.ok) {
     console.warn('Failed to fetch peer data:', response.status)
-    return []
+    return { peers: [], failedTickers: tickers }
   }
   const json = await response.json()
-  return json.peers as CompetitorData[]
+  return {
+    peers: (json.peers ?? []) as CompetitorData[],
+    failedTickers: (json.failed_peers ?? []) as string[],
+  }
 }
 
 /**

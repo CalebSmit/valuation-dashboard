@@ -208,6 +208,11 @@ export function DCFTab({
       <div className="dcf-grid">
         {/* DCF Valuation — top left, open by default */}
         <CollapsibleCard title="DCF Valuation" defaultOpen>
+          {dcfOutput.warning && (
+            <div className="mb-2 p-2 rounded text-xs font-mono border border-[#F0A500] text-[#F0A500] bg-[#F0A500]/10">
+              {dcfOutput.warning}
+            </div>
+          )}
           {/* Prominent upside/downside label — first thing the eye sees */}
           <UpsideLabel
             impliedPrice={dcfOutput.impliedPrice}
@@ -224,7 +229,9 @@ export function DCFTab({
                 ['EV (Exit Multiple)', formatMillions(dcfOutput.enterpriseValueExitMultiple)],
                 ['Net Debt', formatMillions(dcfOutput.netDebt)],
                 ['ROIC', roic !== null ? formatPercent(roic) : 'N/A'],
-                ['Shares Outstanding', (dcfOutput.sharesOutstanding / 1e6).toFixed(0) + 'M'],
+                ['Shares Outstanding', dcfOutput.sharesOutstanding !== null
+                  ? (dcfOutput.sharesOutstanding / 1e6).toFixed(0) + 'M'
+                  : 'N/A'],
               ].map(([label, value]) => (
                 <tr key={label} className="row-b">
                   <td className="py-1.5 clr-muted">{label}</td>

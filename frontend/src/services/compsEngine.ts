@@ -59,7 +59,13 @@ export function computeComps(
     pb: median(peerTable.map(p => p.pb).filter((v): v is number => v !== null)),
   }
 
-  const sharesOutstanding = data.sharesOutstanding ?? 1
+  // Hard gate: a `?? 1` fallback used to silently produce $50B-per-share
+  // implied prices when yfinance returned null (ADRs, post-split edge
+  // cases). null/<=0 must propagate as null implied prices.
+  const rawShares = data.sharesOutstanding
+  const sharesOutstanding = rawShares !== null && rawShares !== undefined && rawShares > 0
+    ? rawShares
+    : null
   const netDebt = (data.totalDebt ?? 0) - (data.totalCash ?? 0)
   const subjectEbitda = getLatestHistoryValue(data.ebitdaHistory)
   const subjectRevenue = data.revenueLatest
@@ -76,7 +82,7 @@ export function computeComps(
       multiple: 'EV/EBITDA',
       peerMedian: medians.evToEbitda,
       subjectMetric: subjectEbitda,
-      impliedPrice: sharesOutstanding > 0 ? equityValue / sharesOutstanding : null,
+      impliedPrice: sharesOutstanding !== null ? equityValue / sharesOutstanding : null,
       isApplicable: true,
       reason: '',
     })
@@ -124,7 +130,7 @@ export function computeComps(
       multiple: 'EV/Sales',
       peerMedian: medians.evToSales,
       subjectMetric: subjectRevenue,
-      impliedPrice: sharesOutstanding > 0 ? equityValue / sharesOutstanding : null,
+      impliedPrice: sharesOutstanding !== null ? equityValue / sharesOutstanding : null,
       isApplicable: true,
       reason: '',
     })
@@ -146,7 +152,7 @@ export function computeComps(
       multiple: 'P/B',
       peerMedian: medians.pb,
       subjectMetric: subjectEquity,
-      impliedPrice: sharesOutstanding > 0 ? impliedMarketCap / sharesOutstanding : null,
+      impliedPrice: sharesOutstanding !== null ? impliedMarketCap / sharesOutstanding : null,
       isApplicable: true,
       reason: '',
     })
@@ -184,5 +190,8 @@ export function computeComps(
     medians,
     impliedPrices,
     weightedImpliedPrice,
+    ...(sharesOutstanding === null
+      ? { warning: 'Shares outstanding unavailable for this ticker — implied prices cannot be calculated.' }
+      : {}),
   }
 }

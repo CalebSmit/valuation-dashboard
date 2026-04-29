@@ -84,7 +84,13 @@ export function computeDCF(
 
   // Base revenue from latest data
   const baseRevenue = data.revenueLatest ?? 0
-  const sharesOutstanding = data.sharesOutstanding ?? 1
+  // Hard gate on shares outstanding: fall back of 1 used to silently
+  // produce $50B-per-share price targets when yfinance returns null
+  // (ADRs, post-split edge cases). null/<=0 must propagate as null.
+  const rawShares = data.sharesOutstanding
+  const sharesOutstanding = rawShares !== null && rawShares !== undefined && rawShares > 0
+    ? rawShares
+    : null
 
   const projections: FCFProjection[] = []
   let currentRevenue = baseRevenue
@@ -188,10 +194,10 @@ export function computeDCF(
   const equityGordon = evGordon !== null ? evGordon - netDebt : null
   const equityExitMultiple = evExitMultiple - netDebt
 
-  const impliedPriceGordon = equityGordon !== null && sharesOutstanding > 0
+  const impliedPriceGordon = equityGordon !== null && sharesOutstanding !== null
     ? equityGordon / sharesOutstanding
     : null
-  const impliedPriceExitMultiple = sharesOutstanding > 0
+  const impliedPriceExitMultiple = sharesOutstanding !== null
     ? equityExitMultiple / sharesOutstanding
     : null
 
@@ -235,6 +241,9 @@ export function computeDCF(
     sensitivityMatrix,
     sensitivityWACCRange: waccRange,
     sensitivityTerminalRange: terminalRange,
+    ...(sharesOutstanding === null
+      ? { warning: 'Shares outstanding unavailable for this ticker — implied price cannot be calculated.' }
+      : {}),
   }
 }
 
@@ -246,7 +255,10 @@ export function buildSensitivityMatrix(
 ): number[][] {
   const { dcf } = assumptions
   const baseRevenue = data.revenueLatest ?? 0
-  const sharesOutstanding = data.sharesOutstanding ?? 1
+  const rawShares = data.sharesOutstanding
+  const sharesOutstanding = rawShares !== null && rawShares !== undefined && rawShares > 0
+    ? rawShares
+    : 0
   const netDebt = (data.totalDebt ?? 0) - (data.totalCash ?? 0)
 
   const growthRates = dcf.revenue_growth_rates.map(r => r.value)

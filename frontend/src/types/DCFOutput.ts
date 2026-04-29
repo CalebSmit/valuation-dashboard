@@ -30,7 +30,9 @@ export interface DCFOutput {
   impliedPriceGordon: number | null
   impliedPriceExitMultiple: number | null
   impliedPrice: number | null
-  sharesOutstanding: number
+  sharesOutstanding: number | null
+  /** Optional warning when implied prices could not be derived (e.g. shares unavailable). */
+  warning?: string
   sensitivityMatrix: number[][]
   sensitivityWACCRange: number[]
   sensitivityTerminalRange: number[]

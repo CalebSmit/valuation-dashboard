@@ -84,8 +84,23 @@ export function CompsTab({ compsOutput, currentPrice }: CompsTabProps) {
     <span className="text-slate-400">No applicable multiples to display.</span>
   )
 
+  const warningLines: string[] = []
+  if (compsOutput.warning) warningLines.push(compsOutput.warning)
+  if (compsOutput.failedPeers && compsOutput.failedPeers > 0) {
+    warningLines.push(
+      `${compsOutput.failedPeers} peer ticker${compsOutput.failedPeers > 1 ? 's' : ''} could not be loaded — comps weighted average uses the remaining peers only.`,
+    )
+  }
+
   return (
     <div className="flex flex-col gap-5">
+      {warningLines.length > 0 && (
+        <div className="p-2 rounded text-xs font-mono border border-[#F0A500] text-[#F0A500] bg-[#F0A500]/10">
+          {warningLines.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
+      )}
       {/* Peer Multiples Table — subject row highlighted at bottom */}
       <div className="p-4 card">
         <h4 className="text-xs uppercase tracking-wider mb-3 font-mono clr-muted">

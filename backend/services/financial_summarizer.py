@@ -128,22 +128,44 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+_LABEL_COLUMN_HINTS = ("metric", "field", "description", "name", "item")
+
+
 def _get_metric_value(df: pd.DataFrame, metric_name: str) -> Any:
-    """Extract a value from a 2-column DataFrame where col 0 is metric name, col 1 is value.
+    """Extract a value from a long-form DataFrame keyed by metric name.
+
     Works for About (Field/Value), Valuation Data (Metric/Value),
-    DDM_Metrics (Metric/Value), and FRED (Description/Latest Value)."""
+    DDM_Metrics (Metric/Value), and FRED (Description/Latest Value).
+
+    The previous implementation used ``range(min(1, len(df.columns)))``
+    which always evaluated to ``range(1)`` and only checked column 0.
+    If a sheet ever shipped with an extra index column on the left
+    (e.g. an unnamed pandas index), every lookup silently returned
+    ``None`` — quietly breaking WACC/DDM/FRED inputs. This version
+    searches by column name first, then falls back to scanning the
+    first two columns for the literal label.
+    """
     if df is None or df.empty:
         return None
-    # Try matching against the first column (metric names)
-    for col_idx in range(min(1, len(df.columns))):
+
+    candidate_cols: list[int] = []
+    for i, col in enumerate(df.columns):
+        if any(hint in str(col).strip().lower() for hint in _LABEL_COLUMN_HINTS):
+            candidate_cols.append(i)
+    if not candidate_cols:
+        candidate_cols = list(range(min(2, len(df.columns))))
+
+    for col_idx in candidate_cols:
         matches = df[df.iloc[:, col_idx].astype(str).str.strip() == metric_name]
-        if not matches.empty:
-            # Return from the value column (usually col 1, but col 2 for FRED "Latest Value")
-            for val_idx in range(1, len(matches.columns)):
-                val = matches.iloc[0, val_idx]
-                if val is not None and _safe_str(val) not in ("", "N/A", "Error"):
-                    return val
-            return matches.iloc[0, 1] if len(matches.columns) > 1 else None
+        if matches.empty:
+            continue
+        # Walk subsequent columns until we find a usable value
+        for val_idx in range(col_idx + 1, len(matches.columns)):
+            val = matches.iloc[0, val_idx]
+            if val is not None and _safe_str(val) not in ("", "N/A", "Error"):
+                return val
+        if len(matches.columns) > col_idx + 1:
+            return matches.iloc[0, col_idx + 1]
     return None
 
 
@@ -662,10 +684,17 @@ def extract_financial_summary(excel_reader: ExcelReader) -> dict[str, Any]:
         "pbRatio": vm("PB Ratio"),
         "evToEbitda": vm("EV to EBITDA"),
         "evToRevenue": vm("EV to Revenue"),
-        "profitMargin": _normalize_rate(vm("Profit Margin")),
-        "operatingMargin": _normalize_rate(vm("Operating Margin")),
-        "roe": _normalize_rate(vm("ROE")),
-        "roa": _normalize_rate(vm("ROA")),
+        # Margin / return ratios from the Valuation Data sheet are populated
+        # by yfinance as decimals (0.312 = 31.2%). _normalize_rate's old
+        # threshold of 1.0 incorrectly halved values like 1.02 (a real 102%
+        # ratio during deferred-revenue or extreme-margin scenarios) or
+        # mistakenly-percentage-form rows. _normalize_pct_field's 1.5
+        # threshold preserves decimals up to 150% and still recovers from
+        # stray percentage-form entries.
+        "profitMargin": _normalize_pct_field(vm("Profit Margin")),
+        "operatingMargin": _normalize_pct_field(vm("Operating Margin")),
+        "roe": _normalize_pct_field(vm("ROE")),
+        "roa": _normalize_pct_field(vm("ROA")),
         "debtToEquity": vm("Debt to Equity"),
         "currentRatio": vm("Current Ratio"),
         "beta": vm("Beta"),
@@ -676,7 +705,7 @@ def extract_financial_summary(excel_reader: ExcelReader) -> dict[str, Any]:
         "revenueHistory": revenue_series,
         "ebitdaHistory": ebitda_series,
         "revenueLatest": _get_latest_annual_value(income_df, "total_revenue") or _get_latest_annual_value(income_df, "Total Revenue"),
-        "grossMargin": _normalize_rate(vm("Gross Margin")),
+        "grossMargin": _normalize_pct_field(vm("Gross Margin")),
         "operatingIncome": _get_latest_annual_value(income_df, "operating_income") or _get_latest_annual_value(income_df, "Operating Income"),
 
         # Balance sheet

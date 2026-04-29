@@ -21,5 +21,10 @@ async def fetch_peers(tickers: str):
     if len(ticker_list) > 10:
         raise HTTPException(status_code=400, detail="Maximum 10 peer tickers allowed")
 
-    peers = fetch_peer_metrics(ticker_list)
-    return {"peers": peers}
+    peers, failed = fetch_peer_metrics(ticker_list)
+    return {
+        "peers": peers,
+        "failed_peers": failed,
+        "requested": len(ticker_list),
+        "loaded": len(peers),
+    }

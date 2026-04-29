@@ -110,9 +110,18 @@ export function computeDDM(
   const longTermGrowth = assumptions.long_term_growth_rate?.value ?? 0.025
   const highGrowthYears = assumptions.high_growth_years ?? 5
 
+  // Minimum spread between ke and g_long. Without this, two real-world
+  // failure modes silently produce NaN/Infinity prices: AI returns
+  // long-term growth ~= required return for high-growth names, or
+  // float-rounding leaves the spread effectively zero after a chained
+  // calculation. 25 bps is small enough not to affect well-behaved
+  // inputs and large enough to keep the divisor numerically safe.
+  const MIN_SPREAD = 0.0025
+  const longTermSpreadOk = (requiredReturn - longTermGrowth) > MIN_SPREAD
+
   // Single-stage DDM: P = D1 / (ke - g)
   let singleStagePrice: number | null = null
-  if (requiredReturn > longTermGrowth && currentDPS > 0) {
+  if (longTermSpreadOk && currentDPS > 0) {
     const d1 = currentDPS * (1 + longTermGrowth)
     singleStagePrice = d1 / (requiredReturn - longTermGrowth)
   }
@@ -121,7 +130,7 @@ export function computeDDM(
   let twoStagePrice: number | null = null
   const dpsProjections: DPSProjection[] = []
 
-  if (currentDPS > 0 && requiredReturn > longTermGrowth) {
+  if (currentDPS > 0 && longTermSpreadOk) {
     let pvSum = 0
     let lastDPS = currentDPS
 
@@ -144,10 +153,15 @@ export function computeDDM(
 
     // Terminal value at end of high growth phase
     const terminalDPS = lastDPS * (1 + longTermGrowth)
-    const terminalValue = terminalDPS / (requiredReturn - longTermGrowth)
-    const pvTerminal = terminalValue / Math.pow(1 + requiredReturn, highGrowthYears)
-
-    twoStagePrice = pvSum + pvTerminal
+    const denominator = requiredReturn - longTermGrowth
+    if (denominator > MIN_SPREAD && Number.isFinite(terminalDPS)) {
+      const terminalValue = terminalDPS / denominator
+      const pvTerminal = terminalValue / Math.pow(1 + requiredReturn, highGrowthYears)
+      const candidate = pvSum + pvTerminal
+      if (Number.isFinite(candidate)) {
+        twoStagePrice = candidate
+      }
+    }
   }
 
   // Use two-stage as primary, single-stage as fallback
