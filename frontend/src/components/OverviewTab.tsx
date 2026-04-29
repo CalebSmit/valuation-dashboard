@@ -141,6 +141,32 @@ export function OverviewTab({ run, blendedOutput }: OverviewTabProps) {
         <h4 className="text-xs uppercase tracking-wider mb-3 font-mono clr-muted">
           Valuation Summary
         </h4>
+
+        {/* Surface when the blended price is computed from fewer than the
+            three available models — otherwise a comps wipeout silently
+            produces a price that's 30–50% off without any visible cue. */}
+        {(() => {
+          const dcfOk = run.dcfOutput?.impliedPrice != null && run.dcfOutput.impliedPrice > 0
+          const compsOk = run.compsOutput?.weightedImpliedPrice != null && run.compsOutput.weightedImpliedPrice > 0
+          const ddmOk = run.ddmOutput?.impliedPrice != null && run.ddmOutput.impliedPrice > 0
+          const okCount = [dcfOk, compsOk, ddmOk].filter(Boolean).length
+          if (okCount === 0 || okCount === 3) return null
+          const failed: string[] = []
+          if (!dcfOk) failed.push('DCF')
+          if (!compsOk) failed.push('Comps')
+          if (!ddmOk) failed.push('DDM')
+          return (
+            <div className="mb-3 p-2 rounded text-xs font-mono border border-[#F0A500] text-[#F0A500] bg-[#F0A500]/10">
+              Blended fair value uses {okCount} of 3 models — {failed.join(', ')}
+              {' '}did not produce a usable price. The blend may not represent a full triangulation.
+              {!compsOk && (run.compsOutput?.failedPeers ?? 0) > 0 && (
+                <> Peer data failed for {run.compsOutput?.failedPeers} ticker
+                {run.compsOutput?.failedPeers === 1 ? '' : 's'}; try Analyze again in 60s.</>
+              )}
+            </div>
+          )
+        })()}
+
         <FootballField
           dcfOutput={run.dcfOutput}
           ddmOutput={run.ddmOutput}

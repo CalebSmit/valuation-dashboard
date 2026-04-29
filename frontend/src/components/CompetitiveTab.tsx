@@ -3,6 +3,8 @@ import { formatMillions, formatPercent, formatMultiple } from '../utils/formatte
 
 interface CompetitiveTabProps {
   financialData: FinancialData | null
+  selectedPeers?: string[]
+  failedPeers?: number
 }
 
 /** Metrics where HIGHER = better (outperforms if subject > peer median) */
@@ -61,9 +63,33 @@ function MetricBar({ label, subjectVal, medianVal, maxVal }: MetricBarProps) {
   )
 }
 
-export function CompetitiveTab({ financialData }: CompetitiveTabProps) {
+export function CompetitiveTab({ financialData, selectedPeers = [], failedPeers = 0 }: CompetitiveTabProps) {
   if (!financialData || !financialData.competitors || financialData.competitors.length === 0) {
-    return <div className="p-4 font-mono text-sm clr-muted">No competitive data available</div>
+    // Distinguish "AI never selected peers" from "Yahoo dropped all of them"
+    // so the user knows whether to retry the run vs. accept that comps
+    // are not applicable for this ticker.
+    if (selectedPeers.length === 0) {
+      return (
+        <div className="p-4 font-mono text-sm clr-muted">
+          No peers selected for this ticker — comps analysis is not applicable.
+        </div>
+      )
+    }
+    return (
+      <div className="p-4 card">
+        <div className="text-xs uppercase tracking-wider mb-2 font-mono clr-muted">
+          Competitive Comparison
+        </div>
+        <div className="text-sm font-mono text-[#F0A500]">
+          Peer data unavailable
+        </div>
+        <p className="text-xs font-mono clr-muted mt-2 leading-relaxed">
+          The AI selected {selectedPeers.length} peer{selectedPeers.length === 1 ? '' : 's'}
+          {' '}({selectedPeers.join(', ')}), but Yahoo Finance returned no usable data for any of them.
+          This is usually a transient rate-limit. Wait 30–60 seconds and click Analyze again.
+        </p>
+      </div>
+    )
   }
 
   const subject = financialData
@@ -175,6 +201,14 @@ export function CompetitiveTab({ financialData }: CompetitiveTabProps) {
 
   return (
     <div className="flex flex-col gap-5">
+      {failedPeers > 0 && (
+        <div className="p-2 rounded text-xs font-mono border border-[#F0A500] text-[#F0A500] bg-[#F0A500]/10">
+          {failedPeers} of {selectedPeers.length || (peers.length + failedPeers)} peer ticker
+          {failedPeers === 1 ? '' : 's'} could not be loaded — comparisons use the {peers.length}
+          {' '}peer{peers.length === 1 ? '' : 's'} that did load.
+        </div>
+      )}
+
       {/* Positioning Summary */}
       <div className="px-4 py-2 card text-xs font-mono clr-muted">
         <span className="clr-accent font-semibold">{subject.ticker || 'Subject'}</span>

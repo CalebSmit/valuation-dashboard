@@ -254,7 +254,11 @@ export function ValuationTabs({
             />
           )}
           {activeTab === 'Competitive' && (
-            <CompetitiveTab financialData={mergedData} />
+            <CompetitiveTab
+              financialData={mergedData}
+              selectedPeers={mergedAssumptions?.comps?.selected_peers ?? []}
+              failedPeers={run.compsOutput?.failedPeers ?? 0}
+            />
           )}
           {activeTab === 'CFA Review' && (
             <CritiquePanel

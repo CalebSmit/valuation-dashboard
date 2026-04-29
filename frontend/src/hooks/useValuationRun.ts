@@ -203,6 +203,20 @@ export function useValuationRun() {
         : DEFAULT_VALUATION_CONFIG
       const blendedOutput = computeBlendedPriceTarget(dcfOutput, ddmOutput, compsOutput, initialConfig)
 
+      // Diagnostic — when the user reports a surprising blended price,
+      // these three numbers tell us which engine produced the outlier.
+      // Cheap to keep in production; only fires once per run.
+      // eslint-disable-next-line no-console
+      console.info('[VALUATION SUMMARY]', {
+        ticker: ticker.toUpperCase(),
+        dcfImpliedPrice: dcfOutput.impliedPrice,
+        compsWeightedPrice: compsOutput.weightedImpliedPrice,
+        ddmImpliedPrice: ddmOutput.impliedPrice,
+        blendedFinalPrice: blendedOutput.finalPrice,
+        peersLoaded: enrichedData.competitors.length,
+        peersFailed: failedPeerTickers.length,
+      })
+
       // Step 5: Finalize run
       const completedRun: ValuationRun = {
         ...newRun,
