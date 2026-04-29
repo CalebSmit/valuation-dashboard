@@ -8,8 +8,16 @@ type ConnectionState = 'checking' | 'connected' | 'unreachable'
  * If the backend is unreachable (Render cold start), shows a banner until
  * it responds. Once connected the banner disappears permanently.
  */
+// Show a subtle "Connecting…" banner if the first health check has not
+// returned within this window. Render free-tier cold starts can take
+// 15–45 s; without a visible signal the user clicks Analyze and gets a
+// confusing error before the banner ever appears. We still avoid
+// flashing for fast backends with a short grace delay.
+const CHECKING_BANNER_DELAY_MS = 1200
+
 export function ServerStatusBanner() {
   const [state, setState] = useState<ConnectionState>('checking')
+  const [showCheckingBanner, setShowCheckingBanner] = useState(false)
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const attemptRef = useRef(0)
 
@@ -32,24 +40,27 @@ export function ServerStatusBanner() {
       }
     }
 
+    const graceTimer = setTimeout(() => {
+      if (!cancelled) setShowCheckingBanner(true)
+    }, CHECKING_BANNER_DELAY_MS)
+
     ping()
 
     return () => {
       cancelled = true
+      clearTimeout(graceTimer)
       if (retryRef.current) clearTimeout(retryRef.current)
     }
   }, [])
 
-  // Only show a banner when the backend is unreachable or still being checked
-  // and we've already waited long enough to know it's slow.
   if (state === 'connected') return null
+  if (state === 'checking' && !showCheckingBanner) return null
 
-  if (state === 'checking') {
-    // Brief grace period — don't flash a banner for fast backends
-    return null
-  }
+  const isChecking = state === 'checking'
+  const message = isChecking
+    ? 'Connecting to server — Render free tier may take 15–45 s on first request…'
+    : 'Connecting to server — the backend is waking up, please wait…'
 
-  // state === 'unreachable'
   return (
     <div
       role="status"
@@ -82,7 +93,7 @@ export function ServerStatusBanner() {
           animation: 'pulse 1.5s ease-in-out infinite',
         }}
       />
-      Connecting to server — the backend is waking up, please wait…
+      {message}
     </div>
   )
 }

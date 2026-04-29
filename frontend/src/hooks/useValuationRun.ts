@@ -2,7 +2,7 @@
  * Main orchestration hook — manages the full valuation run lifecycle.
  * Fetches data, runs AI agent, computes valuations, saves to IndexedDB.
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ValuationRun, AgentLogEntry, RunStatus } from '../types/ValuationRun.ts'
 import type { FinancialData } from '../types/FinancialData.ts'
 import type { Assumptions } from '../types/Assumptions.ts'
@@ -52,6 +52,14 @@ function createEmptyRun(ticker: string): ValuationRun {
 
 export function useValuationRun() {
   const [run, setRun] = useState<ValuationRun | null>(null)
+  // Mirror `run` into a ref so `startRun` can read the freshest value
+  // without putting `run` in its dependency array (which would either
+  // recreate the callback on every state change or capture a stale
+  // run when the user clicks Analyze twice in quick succession).
+  const runRef = useRef<ValuationRun | null>(null)
+  useEffect(() => {
+    runRef.current = run
+  }, [run])
 
   const addLogEntry = useCallback((entry: AgentLogEntry) => {
     setRun(prev => {
@@ -72,10 +80,11 @@ export function useValuationRun() {
     setRun(newRun)
 
     try {
+      const previousRun = runRef.current
       const sameTickerRecentRun =
-        run?.ticker.toUpperCase() === ticker.toUpperCase() &&
-        run.status === 'complete' &&
-        Date.now() - run.createdAt < SESSION_DATA_REUSE_MS
+        previousRun?.ticker.toUpperCase() === ticker.toUpperCase() &&
+        previousRun.status === 'complete' &&
+        Date.now() - previousRun.createdAt < SESSION_DATA_REUSE_MS
 
       let financialData: FinancialData
       let forecastPresets = null
@@ -252,7 +261,7 @@ export function useValuationRun() {
       addLogEntry({ status: 'error', text: errorMsg, timestamp: Date.now() })
       setRun(prev => prev ? { ...prev, status: 'error', error: errorMsg } : prev)
     }
-  }, [addLogEntry, run, setStatus])
+  }, [addLogEntry, setStatus])
 
   const loadRun = useCallback(async (id: string) => {
     const saved = await getRun(id)

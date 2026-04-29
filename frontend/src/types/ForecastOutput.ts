@@ -93,9 +93,12 @@ export interface ForecastStatements {
 }
 
 export interface ForecastValidation {
+  /** True only when Total Assets equals L&E for every projected year. */
   balanced: boolean
   maxDiff: number
   issues: string[]
+  /** Soft-warning issues that do not unbalance the BS (e.g. negative cash plug). */
+  warnings?: string[]
 }
 
 export interface ForecastOutput {

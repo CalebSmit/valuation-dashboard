@@ -324,6 +324,13 @@ export function ForecastsTab({
         }
       </div>
 
+      {/* Soft modeling warnings (e.g. negative implied cash) — surfaced even when BS is balanced */}
+      {validation.warnings && validation.warnings.length > 0 && (
+        <div className="px-3 py-2 text-xs font-mono rounded bg-[#F0A50020] text-[#F0A500]">
+          {validation.warnings.map((w, i) => <div key={i}>{w}</div>)}
+        </div>
+      )}
+
       {/* 3 Statements — "Base" renamed to "LTM Actual" */}
       <StatementTable
         title="Forecast Income Statement"

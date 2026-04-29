@@ -241,6 +241,7 @@ export function computeForecast(
   const otherNcl = baseYear.other_noncurrent_liabilities ?? 0
   const dilutedShares = baseYear.diluted_shares > 0 ? baseYear.diluted_shares : 1
   const issues: string[] = []
+  const warnings: string[] = []
 
   for (let yr = 0; yr < YEARS; yr++) {
     // Revenue: AI absolute or growth-rate based
@@ -311,8 +312,18 @@ export function computeForecast(
     const totalCaExCash = arNew + invNew + ocaNew
     const totalNca = ppeNew + goodwill + otherNca
 
-    // Cash is the plug
+    // Cash is the plug. The balance sheet stays balanced regardless of
+    // sign, so a strongly-negative plug is a *modeling* warning, not a
+    // math error: it means the assumption stack (heavy buybacks, fast
+    // capex, debt repayment, low net income) implies the company would
+    // run out of cash. Surface this as a soft warning so the BS still
+    // shows "balanced" but the user sees the implausibility.
     const cashPlug = (totalLiab + newEquity) - totalCaExCash - totalNca
+    if (cashPlug < 0) {
+      warnings.push(
+        `Y${yr + 1}: implied cash is negative (${cashPlug.toFixed(0)}) — assumptions imply the company runs out of cash. Re-check capex, debt schedule, payouts, or growth.`,
+      )
+    }
     const totalCa = cashPlug + totalCaExCash
     const totalAssets = totalCa + totalNca
     const totalLe = totalLiab + newEquity
@@ -448,6 +459,7 @@ export function computeForecast(
     balanced: issues.length === 0,
     maxDiff,
     issues,
+    warnings,
   }
 
   return {
