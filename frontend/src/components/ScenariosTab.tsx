@@ -2,7 +2,7 @@ import type { ScenarioOutput } from '../types/ScenarioOutput.ts'
 import type { Assumptions } from '../types/Assumptions.ts'
 import { useState } from 'react'
 import { AssumptionField } from './AssumptionField.tsx'
-import { formatCurrency, formatPercent } from '../utils/formatters.ts'
+import { formatCurrency } from '../utils/formatters.ts'
 import { DEFAULT_SCENARIO_PROBABILITIES } from '../utils/constants.ts'
 
 interface ScenariosTabProps {
@@ -134,7 +134,6 @@ export function ScenariosTab({ scenarioOutput, assumptions, onOverride }: Scenar
 
   // Probability of upside: sum of weights for scenarios where price > currentPrice
   // We use the scenario expected price vs a rough current price proxy
-  const bearProb = probabilities.bear ?? 0
   const baseProb = probabilities.base ?? 0
   const bullProb = probabilities.bull ?? 0
 

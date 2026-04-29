@@ -275,7 +275,7 @@ export function DCFTab({
                     width={45}
                   />
                   <Tooltip
-                    formatter={(v: number) => [`$${v.toFixed(1)}M`, 'FCF']}
+                    formatter={(v) => [`$${(v as number).toFixed(1)}M`, 'FCF']}
                     contentStyle={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 4, fontSize: 11, fontFamily: 'IBM Plex Mono' }}
                     labelStyle={{ color: '#8B949E' }}
                   />

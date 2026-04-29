@@ -98,24 +98,6 @@ function ConfidenceDot({ level }: { level: 'high' | 'medium' | 'low' }) {
   )
 }
 
-/** CSS sparkline bar — shows bar height proportional to value relative to row max */
-function SparklineCell({ value, rowMax }: { value: number; rowMax: number }) {
-  const pct = rowMax > 0 ? Math.min(100, Math.max(2, (value / rowMax) * 100)) : 2
-  return (
-    <td className="text-right py-1 px-2 align-bottom clr-accent">
-      <div className="flex flex-col items-end gap-0.5">
-        <span className="text-xs">{typeof value === 'number' && value > 1e6 ? formatNum(value) : formatPct(value)}</span>
-        <div className="w-full flex items-end justify-end" style={{ height: 16 }}>
-          <div
-            className="rounded-t bg-[#00FF88] opacity-60 w-full"
-            style={{ height: `${pct}%`, maxHeight: 16, minHeight: 2 }}
-          />
-        </div>
-      </div>
-    </td>
-  )
-}
-
 function StatementTable({
   title, data, expanded, onToggle,
 }: {

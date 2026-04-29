@@ -12,7 +12,7 @@ interface CompsTabProps {
 function UpsideDownsideBar({
   impliedPrice,
   currentPrice,
-  multiple,
+  multiple: _multiple,
 }: {
   impliedPrice: number
   currentPrice: number | null
