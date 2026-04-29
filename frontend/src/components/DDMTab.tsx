@@ -75,13 +75,15 @@ export function DDMTab({ ddmOutput, assumptions, currentDPS, originalDPS, curren
     <span className="text-slate-400">Insufficient data to display formula.</span>
   )
 
-  // Dividend metrics quick-summary — pulled from DDM_Metrics sheet
+  // Dividend metrics quick-summary — pulled from DDM_Metrics sheet.
+  // Use Number.isFinite so undefined and NaN don't slip through the
+  // `!== null` checks and crash `.toFixed` calls below.
   const dm = dividendMetrics
-  const showDividendMetrics = dm && (
-    dm.annualDividendRate !== null
-    || dm.currentDividendYieldPct !== null
-    || dm.fiveYearCagrPct !== null
-    || (dm.yearsOfHistory !== null && dm.yearsOfHistory > 0)
+  const showDividendMetrics = !!dm && (
+    Number.isFinite(dm.annualDividendRate as number)
+    || Number.isFinite(dm.currentDividendYieldPct as number)
+    || Number.isFinite(dm.fiveYearCagrPct as number)
+    || (Number.isFinite(dm.yearsOfHistory as number) && (dm.yearsOfHistory as number) > 0)
   )
 
   return (
@@ -96,31 +98,37 @@ export function DDMTab({ ddmOutput, assumptions, currentDPS, originalDPS, curren
             <div>
               <div className="text-[10px] uppercase tracking-wider clr-muted">Yield</div>
               <div className="clr-text text-sm font-semibold">
-                {dm!.currentDividendYieldPct !== null ? `${dm!.currentDividendYieldPct.toFixed(2)}%` : 'N/A'}
+                {Number.isFinite(dm.currentDividendYieldPct as number)
+                  ? `${(dm.currentDividendYieldPct as number).toFixed(2)}%`
+                  : 'N/A'}
               </div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider clr-muted">Payout Ratio</div>
               <div className="clr-text text-sm font-semibold">
-                {dm!.payoutRatioPct !== null ? `${dm!.payoutRatioPct.toFixed(1)}%` : 'N/A'}
+                {Number.isFinite(dm.payoutRatioPct as number)
+                  ? `${(dm.payoutRatioPct as number).toFixed(1)}%`
+                  : 'N/A'}
               </div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider clr-muted">5Y CAGR</div>
               <div className={`text-sm font-semibold ${
-                dm!.fiveYearCagrPct === null ? 'clr-muted'
-                  : dm!.fiveYearCagrPct > 0 ? 'text-[#3FB950]'
+                !Number.isFinite(dm.fiveYearCagrPct as number) ? 'clr-muted'
+                  : (dm.fiveYearCagrPct as number) > 0 ? 'text-[#3FB950]'
                   : 'text-[#F85149]'
               }`}>
-                {dm!.fiveYearCagrPct !== null ? `${dm!.fiveYearCagrPct.toFixed(2)}%` : 'N/A'}
+                {Number.isFinite(dm.fiveYearCagrPct as number)
+                  ? `${(dm.fiveYearCagrPct as number).toFixed(2)}%`
+                  : 'N/A'}
               </div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider clr-muted">History</div>
               <div className="clr-text text-sm font-semibold">
-                {dm!.yearsOfHistory !== null
-                  ? `${Math.round(dm!.yearsOfHistory)}y · ${dm!.paymentFrequency || 'N/A'}`
-                  : (dm!.paymentFrequency || 'N/A')}
+                {Number.isFinite(dm.yearsOfHistory as number)
+                  ? `${Math.round(dm.yearsOfHistory as number)}y · ${dm.paymentFrequency || 'N/A'}`
+                  : (dm.paymentFrequency || 'N/A')}
               </div>
             </div>
           </div>
