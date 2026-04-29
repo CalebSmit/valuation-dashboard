@@ -340,6 +340,168 @@ def _extract_capital_structure(
     }
 
 
+def _extract_options_summary(df: pd.DataFrame | None) -> dict[str, Any]:
+    """Pull Options_Summary into a typed dict for the dashboard.
+
+    The sheet is a Metric/Value long form; we project the fields the UI
+    actually renders. Implied vols stay in decimal form (0.32 = 32%).
+    """
+    if df is None or df.empty:
+        return {}
+    base = _extract_additional_metrics(df)
+    return {
+        "nearestExpiry": _safe_str(base.get("Nearest Expiry") or "") or None,
+        "avgCallIV": _safe_float(base.get("Avg Call IV")),
+        "avgPutIV": _safe_float(base.get("Avg Put IV")),
+        "putCallVolumeRatio": _safe_float(base.get("Put/Call Volume Ratio")),
+        "putCallOpenInterestRatio": _safe_float(base.get("Put/Call OI Ratio")),
+        "callVolume": _safe_float(base.get("Call Volume")),
+        "putVolume": _safe_float(base.get("Put Volume")),
+        "callOpenInterest": _safe_float(base.get("Call Open Interest")),
+        "putOpenInterest": _safe_float(base.get("Put Open Interest")),
+    }
+
+
+def _extract_institutional_holders(df: pd.DataFrame | None, limit: int = 10) -> list[dict[str, Any]]:
+    """Top institutional holders. yfinance returns columns including Holder, Shares, Date Reported, % Out, Value."""
+    if df is None or df.empty:
+        return []
+
+    def _row_get(row: pd.Series, *keys: str) -> Any:
+        for k in keys:
+            if k in row and pd.notna(row[k]):
+                return row[k]
+        return None
+
+    rows: list[dict[str, Any]] = []
+    for _, row in df.head(limit).iterrows():
+        rows.append({
+            "holder": _safe_str(_row_get(row, "Holder", "holder")),
+            "shares": _safe_float(_row_get(row, "Shares", "shares")),
+            "dateReported": _safe_str(_row_get(row, "Date Reported", "date_reported")),
+            "percentOut": _safe_float(_row_get(row, "% Out", "pctHeld", "percent_held")),
+            "value": _safe_float(_row_get(row, "Value", "value")),
+        })
+    return rows
+
+
+def _extract_insider_transactions(df: pd.DataFrame | None, limit: int = 10) -> list[dict[str, Any]]:
+    """Recent insider transactions; yfinance shape varies, so read defensively."""
+    if df is None or df.empty:
+        return []
+
+    def _row_get(row: pd.Series, *keys: str) -> Any:
+        for k in keys:
+            if k in row and pd.notna(row[k]):
+                return row[k]
+        return None
+
+    rows: list[dict[str, Any]] = []
+    for _, row in df.head(limit).iterrows():
+        rows.append({
+            "insider": _safe_str(_row_get(row, "Insider", "insider")),
+            "position": _safe_str(_row_get(row, "Position", "position", "Relation", "relation")),
+            "transaction": _safe_str(_row_get(row, "Transaction", "transaction", "Action", "action")),
+            "shares": _safe_float(_row_get(row, "Shares", "shares")),
+            "value": _safe_float(_row_get(row, "Value", "value")),
+            "date": _safe_str(_row_get(row, "Start Date", "Date", "date", "transaction_date")),
+        })
+    return rows
+
+
+def _ownership_concentration(holders: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate ownership-concentration signals from the top holders list."""
+    if not holders:
+        return {"topHoldersPercent": None, "topHolderCount": 0}
+    total_pct = 0.0
+    count = 0
+    for h in holders:
+        pct = h.get("percentOut")
+        if pct is None:
+            continue
+        # yfinance percentHeld: 0.064 = 6.4%; older sheets: 6.4 means 6.4%.
+        pct_decimal = pct / 100.0 if abs(pct) > 1.0 else pct
+        total_pct += pct_decimal
+        count += 1
+    return {
+        "topHoldersPercent": total_pct if count else None,
+        "topHolderCount": count,
+    }
+
+
+def _extract_news(df: pd.DataFrame | None, limit: int = 10) -> list[dict[str, Any]]:
+    """Recent news headlines."""
+    if df is None or df.empty:
+        return []
+    rows: list[dict[str, Any]] = []
+    for _, row in df.head(limit).iterrows():
+        title = _safe_str(row.get("Title", "")) if hasattr(row, "get") else _safe_str(row.iloc[0])
+        publisher = _safe_str(row.get("Publisher", "")) if hasattr(row, "get") else ""
+        link = _safe_str(row.get("Link", "")) if hasattr(row, "get") else ""
+        published = _safe_str(row.get("Published", "")) if hasattr(row, "get") else ""
+        rows.append({
+            "title": title,
+            "publisher": publisher,
+            "link": link,
+            "published": published,
+        })
+    return rows
+
+
+def _extract_earnings_calendar(df: pd.DataFrame | None) -> dict[str, Any]:
+    """Pull next earnings date and guidance from Earnings_Calendar (Metric/Value long form)."""
+    if df is None or df.empty:
+        return {}
+    raw = _extract_additional_metrics(df)
+    return {
+        "nextEarningsDate": _safe_str(
+            raw.get("Earnings Date")
+            or raw.get("earnings_date")
+            or raw.get("Earnings Date Estimate")
+            or ""
+        ) or None,
+        "epsEstimate": _safe_float(raw.get("EPS Estimate") or raw.get("Earnings Average")),
+        "epsHigh": _safe_float(raw.get("Earnings High")),
+        "epsLow": _safe_float(raw.get("Earnings Low")),
+        "revenueEstimate": _safe_float(raw.get("Revenue Average") or raw.get("Revenue Estimate")),
+        "revenueHigh": _safe_float(raw.get("Revenue High")),
+        "revenueLow": _safe_float(raw.get("Revenue Low")),
+    }
+
+
+def _summarize_recent_surprises(history: list[dict[str, Any]], n: int = 4) -> dict[str, Any]:
+    """Compress earnings_history into a simple beat/miss summary for the dashboard strip."""
+    if not history:
+        return {"beats": 0, "misses": 0, "averageSurprisePct": None, "lastSurprisePct": None}
+    recent = history[:n]
+    beats = sum(1 for r in recent if (r.get("surprisePercent") or 0) > 0)
+    misses = sum(1 for r in recent if (r.get("surprisePercent") or 0) < 0)
+    surprises = [r.get("surprisePercent") for r in recent if r.get("surprisePercent") is not None]
+    avg = sum(surprises) / len(surprises) if surprises else None
+    return {
+        "beats": beats,
+        "misses": misses,
+        "averageSurprisePct": avg,
+        "lastSurprisePct": recent[0].get("surprisePercent") if recent else None,
+    }
+
+
+def _extract_dividend_metrics(df: pd.DataFrame | None) -> dict[str, Any]:
+    """DDM_Metrics in a UI-friendly shape (% values stay in % form for direct display)."""
+    if df is None or df.empty:
+        return {}
+    base = _extract_additional_metrics(df)
+    return {
+        "annualDividendRate": _safe_float(base.get("Annual Dividend Rate")),
+        "currentDividendYieldPct": _safe_float(base.get("Current Dividend Yield")),
+        "payoutRatioPct": _safe_float(base.get("Payout Ratio")),
+        "fiveYearCagrPct": _safe_float(base.get("5-Year CAGR %")),
+        "threeYearCagrPct": _safe_float(base.get("3-Year CAGR %")),
+        "yearsOfHistory": _safe_float(base.get("Years of Dividend History")),
+        "paymentFrequency": _safe_str(base.get("Payment Frequency") or "N/A"),
+    }
+
+
 def _derive_annual_dividend_rate(
     excel_reader: ExcelReader,
     current_price: float | None,
@@ -573,6 +735,12 @@ def extract_financial_summary(excel_reader: ExcelReader) -> dict[str, Any]:
     earnings_hist_df = excel_reader.get_sheet_as_df("Earnings_History")
     analyst_ratings_df = excel_reader.get_sheet_as_df("Analyst_Ratings")
     additional_df = excel_reader.get_sheet_as_df("Additional_Metrics")
+    # Sheets used to surface previously-unsurfaced data in the dashboard
+    options_df = excel_reader.get_sheet_as_df("Options_Summary")
+    institutional_df = excel_reader.get_sheet_as_df("Institutional_Holdings")
+    insider_df = excel_reader.get_sheet_as_df("Insider_Transactions")
+    news_df = excel_reader.get_sheet_as_df("News")
+    earnings_calendar_df = excel_reader.get_sheet_as_df("Earnings_Calendar")
 
     # Company info
     company_info = {}
@@ -796,6 +964,17 @@ def extract_financial_summary(excel_reader: ExcelReader) -> dict[str, Any]:
 
         # D&A for proper EBIT-based tax calculation
         "depreciationAndAmortization": _get_latest_annual_value(cashflow_df, "depreciation_and_amortization") or _get_latest_annual_value(income_df, "reconciled_depreciation"),
+
+        # Phase 4: pipeline data the dashboard previously did not surface.
+        # Each block is shaped for direct rendering in a dedicated UI card.
+        "optionsSummary": _extract_options_summary(options_df),
+        "institutionalHolders": _extract_institutional_holders(institutional_df),
+        "insiderTransactions": _extract_insider_transactions(insider_df),
+        "ownershipConcentration": _ownership_concentration(_extract_institutional_holders(institutional_df, limit=10)),
+        "recentNews": _extract_news(news_df),
+        "earningsCalendar": _extract_earnings_calendar(earnings_calendar_df),
+        "earningsSurpriseSummary": _summarize_recent_surprises(_extract_earnings_history(earnings_hist_df)),
+        "dividendMetricsDetail": _extract_dividend_metrics(ddm_df),
 
         # Price history, period returns, and risk-adjusted metrics
         # (populated below via _extract_price_history_and_metrics)

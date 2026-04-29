@@ -3,6 +3,9 @@ import type { BlendedPriceTarget } from '../types/BlendedOutput.ts'
 import { FootballField } from './FootballField.tsx'
 import { PriceChart } from './PriceChart.tsx'
 import { ReturnHistory } from './ReturnHistory.tsx'
+import { OwnershipCard } from './OwnershipCard.tsx'
+import { RecentDevelopmentsCard } from './RecentDevelopmentsCard.tsx'
+import { EarningsStripCard } from './EarningsStripCard.tsx'
 import { formatCurrency, formatMillions, formatPercent, formatMultiple } from '../utils/formatters.ts'
 
 interface OverviewTabProps {
@@ -60,6 +63,12 @@ export function OverviewTab({ run, blendedOutput }: OverviewTabProps) {
         />
       </div>
 
+      {/* Earnings strip — next date + recent surprise track record */}
+      <EarningsStripCard
+        calendar={data?.earningsCalendar}
+        summary={data?.earningsSurpriseSummary}
+      />
+
       {/* Historical Price Chart + Forecast */}
       {data?.stockPriceHistory && data.stockPriceHistory.length > 0 && (
         <div className="p-4 card">
@@ -77,6 +86,16 @@ export function OverviewTab({ run, blendedOutput }: OverviewTabProps) {
           />
         </div>
       )}
+
+      {/* Ownership signals — top institutional holders + insider activity */}
+      <OwnershipCard
+        holders={data?.institutionalHolders}
+        insiders={data?.insiderTransactions}
+        concentration={data?.ownershipConcentration}
+      />
+
+      {/* Recent news headlines */}
+      <RecentDevelopmentsCard news={data?.recentNews} />
 
       {/* Return History & Risk Metrics */}
       {(data?.periodReturns || data?.riskMetrics) && (

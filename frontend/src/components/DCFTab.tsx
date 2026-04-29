@@ -12,6 +12,7 @@ import { DeltaIndicator } from './DeltaIndicator.tsx'
 import { UpsideLabel } from './UpsideLabel.tsx'
 import { CalcBreakdown } from './CalcBreakdown.tsx'
 import { WACCBuildupCard } from './WACCBuildupCard.tsx'
+import { OptionsImpliedVolCard } from './OptionsImpliedVolCard.tsx'
 import { formatCurrency, formatPercent, formatMillions } from '../utils/formatters.ts'
 import { BOUNDS } from '../utils/constants.ts'
 import { computeROIC } from '../utils/financialMath.ts'
@@ -202,6 +203,12 @@ export function DCFTab({
         kd={dcfOutput.afterTaxCostOfDebt}
         we={waccA.equity_weight.value}
         wd={waccA.debt_weight.value}
+      />
+
+      {/* Options-implied vs realized vol — sanity-check on WACC risk inputs */}
+      <OptionsImpliedVolCard
+        options={financialData?.optionsSummary}
+        riskMetrics={financialData?.riskMetrics ?? null}
       />
 
       {/* Two-column grid of collapsible cards */}

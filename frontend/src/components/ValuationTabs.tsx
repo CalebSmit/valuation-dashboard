@@ -238,6 +238,7 @@ export function ValuationTabs({
               currentDPS={mergedData?.annualDividendRate ?? null}
               originalDPS={originalData?.annualDividendRate ?? null}
               currentPrice={run.currentPrice ?? null}
+              dividendMetrics={mergedData?.dividendMetricsDetail}
               onOverride={onOverride}
               onDataOverride={onDataOverride}
             />

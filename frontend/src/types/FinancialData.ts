@@ -38,6 +38,74 @@ export interface CompetitorData {
   beta: number | null
 }
 
+export interface OptionsSummary {
+  nearestExpiry: string | null
+  avgCallIV: number | null
+  avgPutIV: number | null
+  putCallVolumeRatio: number | null
+  putCallOpenInterestRatio: number | null
+  callVolume: number | null
+  putVolume: number | null
+  callOpenInterest: number | null
+  putOpenInterest: number | null
+}
+
+export interface InstitutionalHolder {
+  holder: string
+  shares: number | null
+  dateReported: string
+  percentOut: number | null
+  value: number | null
+}
+
+export interface InsiderTransaction {
+  insider: string
+  position: string
+  transaction: string
+  shares: number | null
+  value: number | null
+  date: string
+}
+
+export interface OwnershipConcentration {
+  topHoldersPercent: number | null
+  topHolderCount: number
+}
+
+export interface NewsItem {
+  title: string
+  publisher: string
+  link: string
+  published: string
+}
+
+export interface EarningsCalendar {
+  nextEarningsDate: string | null
+  epsEstimate: number | null
+  epsHigh: number | null
+  epsLow: number | null
+  revenueEstimate: number | null
+  revenueHigh: number | null
+  revenueLow: number | null
+}
+
+export interface EarningsSurpriseSummary {
+  beats: number
+  misses: number
+  averageSurprisePct: number | null
+  lastSurprisePct: number | null
+}
+
+export interface DividendMetricsDetail {
+  annualDividendRate: number | null
+  currentDividendYieldPct: number | null
+  payoutRatioPct: number | null
+  fiveYearCagrPct: number | null
+  threeYearCagrPct: number | null
+  yearsOfHistory: number | null
+  paymentFrequency: string
+}
+
 export interface FinancialData {
   ticker: string
   companyName: string
@@ -118,4 +186,16 @@ export interface FinancialData {
   stockPriceHistory: PriceDataPoint[]
   periodReturns: PeriodReturns | null
   riskMetrics: RiskMetrics | null
+
+  // Phase 4: optional pipeline data surfaced in dashboard cards. Older
+  // raw_data.xlsx workbooks may not include every sheet, so each field
+  // is optional and consumers must handle empty/null cases.
+  optionsSummary?: OptionsSummary
+  institutionalHolders?: InstitutionalHolder[]
+  insiderTransactions?: InsiderTransaction[]
+  ownershipConcentration?: OwnershipConcentration
+  recentNews?: NewsItem[]
+  earningsCalendar?: EarningsCalendar
+  earningsSurpriseSummary?: EarningsSurpriseSummary
+  dividendMetricsDetail?: DividendMetricsDetail
 }

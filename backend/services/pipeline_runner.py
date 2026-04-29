@@ -439,15 +439,39 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
 
     # ── Placeholder sheets (kept for schema compat, populated where possible) ──
     progress_cb("[8/10] Fetching options & ownership data...")
-    # Options implied volatility summary
+    # Options implied volatility summary + put/call ratio
     try:
         opts = _yf_call_with_retry(lambda: t.option_chain(t.options[0]) if t.options else None)
         if opts:
-            iv_call = opts.calls["impliedVolatility"].mean() if "impliedVolatility" in opts.calls.columns else None
-            iv_put  = opts.puts["impliedVolatility"].mean()  if "impliedVolatility" in opts.puts.columns  else None
+            calls = opts.calls
+            puts = opts.puts
+            iv_call = calls["impliedVolatility"].mean() if "impliedVolatility" in calls.columns else None
+            iv_put = puts["impliedVolatility"].mean() if "impliedVolatility" in puts.columns else None
+            call_volume = calls["volume"].sum() if "volume" in calls.columns else None
+            put_volume = puts["volume"].sum() if "volume" in puts.columns else None
+            call_oi = calls["openInterest"].sum() if "openInterest" in calls.columns else None
+            put_oi = puts["openInterest"].sum() if "openInterest" in puts.columns else None
+            put_call_volume = (
+                float(put_volume) / float(call_volume)
+                if call_volume and float(call_volume) > 0 and put_volume is not None
+                else None
+            )
+            put_call_oi = (
+                float(put_oi) / float(call_oi)
+                if call_oi and float(call_oi) > 0 and put_oi is not None
+                else None
+            )
+            expiry = t.options[0] if t.options else None
             options_df = pd.DataFrame([
+                ("Nearest Expiry", expiry),
                 ("Avg Call IV", iv_call),
-                ("Avg Put IV",  iv_put),
+                ("Avg Put IV", iv_put),
+                ("Put/Call Volume Ratio", put_call_volume),
+                ("Put/Call OI Ratio", put_call_oi),
+                ("Call Volume", _safe(call_volume)),
+                ("Put Volume", _safe(put_volume)),
+                ("Call Open Interest", _safe(call_oi)),
+                ("Put Open Interest", _safe(put_oi)),
             ], columns=["Metric", "Value"])
         else:
             options_df = pd.DataFrame()
@@ -468,16 +492,70 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
     except Exception:
         insider_df = pd.DataFrame()
 
-    # News
+    # News (yfinance returns either a list or `{"news": [...]}` depending on version)
     try:
         news = _yf_call_with_retry(lambda: t.news)
-        if news:
-            news_rows = [{"Title": n.get("title",""), "Publisher": n.get("publisher",""), "Link": n.get("link","")} for n in news[:20]]
+        if isinstance(news, dict):
+            items = news.get("news") or []
+        else:
+            items = news or []
+        if items:
+            news_rows = []
+            for n in items[:20]:
+                # yfinance shape varies: sometimes title/publisher live under
+                # n["content"]["title"] or n["content"]["provider"]["displayName"]
+                content = n.get("content") if isinstance(n, dict) else None
+                if isinstance(content, dict):
+                    title = content.get("title") or n.get("title") or ""
+                    provider = content.get("provider") or {}
+                    publisher = provider.get("displayName") if isinstance(provider, dict) else (n.get("publisher") or "")
+                    link_obj = content.get("canonicalUrl") or content.get("clickThroughUrl") or {}
+                    link = link_obj.get("url") if isinstance(link_obj, dict) else (n.get("link") or "")
+                    pub_date = content.get("pubDate") or content.get("displayTime") or n.get("providerPublishTime") or ""
+                else:
+                    title = n.get("title", "")
+                    publisher = n.get("publisher", "")
+                    link = n.get("link", "")
+                    pub_date = n.get("providerPublishTime", "")
+                news_rows.append({
+                    "Title": title or "",
+                    "Publisher": publisher or "",
+                    "Link": link or "",
+                    "Published": str(pub_date or ""),
+                })
             news_df = pd.DataFrame(news_rows)
         else:
             news_df = pd.DataFrame()
     except Exception:
         news_df = pd.DataFrame()
+
+    # Earnings calendar (next earnings date)
+    try:
+        cal = _yf_call_with_retry(lambda: t.calendar)
+        cal_rows: list[tuple[str, Any]] = []
+        if isinstance(cal, dict):
+            for key, value in cal.items():
+                # Normalise dates / lists to strings
+                if isinstance(value, (list, tuple)):
+                    value = ", ".join(str(v) for v in value)
+                elif hasattr(value, "isoformat"):
+                    value = value.isoformat()
+                cal_rows.append((str(key), value))
+        elif cal is not None and hasattr(cal, "to_dict"):
+            try:
+                cal_dict = cal.to_dict()
+                for key, value in cal_dict.items():
+                    if isinstance(value, dict):
+                        for sub_v in value.values():
+                            cal_rows.append((str(key), str(sub_v)))
+                            break
+                    else:
+                        cal_rows.append((str(key), str(value)))
+            except Exception:
+                pass
+        earnings_calendar_df = pd.DataFrame(cal_rows, columns=["Metric", "Value"]) if cal_rows else pd.DataFrame()
+    except Exception:
+        earnings_calendar_df = pd.DataFrame()
 
     # ── Write raw_data.xlsx ────────────────────────────────────────────────────
     progress_cb("[9/10] Writing raw_data.xlsx...")
@@ -510,6 +588,7 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
         "Institutional_Holdings":   institutional_df,
         "Insider_Transactions":     insider_df,
         "News":                     news_df,
+        "Earnings_Calendar":        earnings_calendar_df,
     }
 
     RAW_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)

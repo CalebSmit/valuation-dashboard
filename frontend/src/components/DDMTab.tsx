@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { DDMOutput } from '../types/DDMOutput.ts'
 import type { Assumptions } from '../types/Assumptions.ts'
+import type { DividendMetricsDetail } from '../types/FinancialData.ts'
 import type { DataOverrides } from '../hooks/useDataOverrides.ts'
 import { AssumptionField } from './AssumptionField.tsx'
 import { DataField } from './DataField.tsx'
@@ -27,6 +28,7 @@ interface DDMTabProps {
   currentDPS: number | null
   originalDPS: number | null
   currentPrice?: number | null
+  dividendMetrics?: DividendMetricsDetail
   onOverride: (path: string, value: number) => void
   onDataOverride: (field: keyof DataOverrides, value: number) => void
 }
@@ -37,7 +39,7 @@ function confidenceBanner(score: number): { label: string; className: string } {
   return { label: 'DDM has limited applicability — consider reducing DDM model weight', className: 'clr-muted' }
 }
 
-export function DDMTab({ ddmOutput, assumptions, currentDPS, originalDPS, currentPrice, onOverride, onDataOverride }: DDMTabProps) {
+export function DDMTab({ ddmOutput, assumptions, currentDPS, originalDPS, currentPrice, dividendMetrics, onOverride, onDataOverride }: DDMTabProps) {
   const [showInputs, setShowInputs] = useState(false)
 
   if (!ddmOutput) {
@@ -73,8 +75,58 @@ export function DDMTab({ ddmOutput, assumptions, currentDPS, originalDPS, curren
     <span className="text-slate-400">Insufficient data to display formula.</span>
   )
 
+  // Dividend metrics quick-summary — pulled from DDM_Metrics sheet
+  const dm = dividendMetrics
+  const showDividendMetrics = dm && (
+    dm.annualDividendRate !== null
+    || dm.currentDividendYieldPct !== null
+    || dm.fiveYearCagrPct !== null
+    || (dm.yearsOfHistory !== null && dm.yearsOfHistory > 0)
+  )
+
   return (
     <div className="flex flex-col gap-5">
+      {/* Dividend Metrics summary — sustainability snapshot ahead of applicability */}
+      {showDividendMetrics && (
+        <div className="p-3 card">
+          <h4 className="text-xs uppercase tracking-wider mb-2 font-mono clr-muted">
+            Dividend Metrics
+          </h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider clr-muted">Yield</div>
+              <div className="clr-text text-sm font-semibold">
+                {dm!.currentDividendYieldPct !== null ? `${dm!.currentDividendYieldPct.toFixed(2)}%` : 'N/A'}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider clr-muted">Payout Ratio</div>
+              <div className="clr-text text-sm font-semibold">
+                {dm!.payoutRatioPct !== null ? `${dm!.payoutRatioPct.toFixed(1)}%` : 'N/A'}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider clr-muted">5Y CAGR</div>
+              <div className={`text-sm font-semibold ${
+                dm!.fiveYearCagrPct === null ? 'clr-muted'
+                  : dm!.fiveYearCagrPct > 0 ? 'text-[#3FB950]'
+                  : 'text-[#F85149]'
+              }`}>
+                {dm!.fiveYearCagrPct !== null ? `${dm!.fiveYearCagrPct.toFixed(2)}%` : 'N/A'}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider clr-muted">History</div>
+              <div className="clr-text text-sm font-semibold">
+                {dm!.yearsOfHistory !== null
+                  ? `${Math.round(dm!.yearsOfHistory)}y · ${dm!.paymentFrequency || 'N/A'}`
+                  : (dm!.paymentFrequency || 'N/A')}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Applicability Checklist */}
       <div className="p-4 card">
         <div className="flex items-center justify-between mb-3">

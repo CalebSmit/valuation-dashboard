@@ -99,7 +99,7 @@ All four valuation engines (DCF, DDM, Comps, Scenarios) run **entirely in the br
 | Local storage | IndexedDB via Dexie 4 (run history) |
 | Charts | Recharts 3 |
 | Export | SheetJS (xlsx), jsPDF, html2canvas |
-| Tests | Vitest 4 |
+| Tests | Vitest 4 (53 tests) |
 
 ---
 
@@ -114,19 +114,23 @@ valuation-dashboard/
 │   ├── Dockerfile                 For Render / Fly.io deployment
 │   ├── fly.toml                   Fly.io config (alternative to Render)
 │   ├── routers/
-│   │   ├── pipeline.py            POST /api/pipeline/{ticker}  — runs data pipeline
+│   │   ├── pipeline.py            POST /api/pipeline/{ticker}  — runs data pipeline (SSE)
 │   │   ├── analyze.py             POST /api/analyze/{ticker}   — AI agent (SSE stream)
 │   │   ├── peers.py               GET  /api/peers?tickers=...  — peer yfinance data
 │   │   ├── financials.py          GET  /api/financials/summary — compact summary JSON
 │   │   ├── sheets.py              GET  /api/sheets             — list xlsx sheet names
-│   │   └── critique.py            POST /api/critique           — AI assumption critique
+│   │   └── critique.py            POST /api/critique + /api/refine — AI critique & refine
 │   └── services/
 │       ├── agent.py               CFA-grade system prompt + tool schema for Claude
-│       ├── pipeline_runner.py     Subprocess manager for py main.py
+│       ├── pipeline_runner.py     Self-contained yfinance + FRED pipeline (no subprocess)
+│       ├── pipeline_lock.py       Cross-process file lock for /data volume on Render
 │       ├── peer_fetcher.py        Lightweight yfinance peer data fetcher
 │       ├── excel_reader.py        raw_data.xlsx reader (cached)
 │       ├── financial_summarizer.py  Extracts compact ~2KB summary from 59 sheets
-│       ├── critique_engine.py
+│       ├── forecast_presets.py    Computes Python preset assumptions for forecast
+│       ├── critique_engine.py     Deterministic CFA critique checks
+│       ├── refine_engine.py       Claude Haiku auto-fix for failing critique issues
+│       ├── ticker_validation.py
 │       └── providers/
 │           ├── anthropic_adapter.py   Claude (standard + deep research with web search)
 │           ├── gemini_adapter.py
@@ -210,7 +214,7 @@ cd frontend
 # Type check (catches import errors, null issues, unused vars)
 npx tsc --noEmit
 
-# Unit tests (49 tests — DCF, DDM, Comps, financialMath, excelExporter)
+# Unit tests (53 tests — DCF, DDM, Comps, financialMath, excelExporter)
 npm test
 
 # Production build (catches Vite bundling issues)
@@ -253,6 +257,10 @@ npm run build
 | `CritiquePanel.tsx` | AI critique and refine panel for assumptions |
 | `PriceChart.tsx` | Historical stock price chart |
 | `ReturnHistory.tsx` | Historical return chart |
+| `OwnershipCard.tsx` | Top institutional holders + recent insider transactions on OverviewTab |
+| `RecentDevelopmentsCard.tsx` | Recent news headlines on OverviewTab |
+| `EarningsStripCard.tsx` | Next earnings date + 4Q surprise track record on OverviewTab |
+| `OptionsImpliedVolCard.tsx` | Options-implied vs realized vol sanity check on DCFTab — flags WACC mispricing |
 
 ---
 
@@ -297,7 +305,7 @@ npm run build
 |------|---------------|
 | `Assumptions.ts` | `SourcedAssumption`, `WACCAssumptions`, `DCFAssumptions`, `DDMAssumptions`, `CompsAssumptions`, `ScenarioAssumptions` |
 | `ValuationRun.ts` | `ValuationRun` — includes `currentPrice`, `dcfOutput`, `ddmOutput`, `compsOutput`, `previousPrices`, `scenarioOutput`, `forecastPresets`, `aiRecommendedConfig` |
-| `FinancialData.ts` | `FinancialData` — all company financials fed into engines |
+| `FinancialData.ts` | `FinancialData` (engine inputs) plus optional UI-only blocks: `OptionsSummary`, `InstitutionalHolder`, `InsiderTransaction`, `OwnershipConcentration`, `NewsItem`, `EarningsCalendar`, `EarningsSurpriseSummary`, `DividendMetricsDetail` |
 | `DCFOutput.ts` | `DCFOutput` — projections array, terminal values, sensitivity matrix, implied prices (Gordon, Exit, Blended) |
 | `DDMOutput.ts` | `DDMOutput` — `applicabilityCriteria[]`, `dpsProjections[]`, `singleStagePrice`, `twoStagePrice`, `impliedPrice` |
 | `CompsOutput.ts` | `CompsOutput` — `peerTable[]`, `medians`, `impliedPrices[]`, `weightedImpliedPrice` |
@@ -414,6 +422,12 @@ No extra env vars needed for local dev. The Vite proxy handles `/api` routing au
 7. **Cloudflare Pages auto-deploys on push** — every `git push origin master` triggers a new Pages build. Make sure `npm run build` passes locally before pushing if you don't want a broken production deploy.
 
 8. **Render sleeps on free tier** — do not mistake a 30-second cold start for the backend being broken. The frontend handles it gracefully.
+
+9. **API keys travel in `Authorization: Bearer <key>` headers, not request bodies.** When adding a new endpoint that needs a provider key, read it from `Authorization` (see `routers/analyze.py` and `routers/critique.py` for the pattern). Putting keys in the JSON body causes them to leak into FastAPI 422 echoes and any access-log middleware.
+
+10. **Pipeline writes are now atomic** — `raw_data.xlsx` is written to a sibling `.tmp` file then promoted with `os.replace()`. Don't bypass this with a direct `pd.ExcelWriter(RAW_DATA_PATH)` call; you'd reintroduce the partial-read race for concurrent `/api/financials/summary` requests. The cross-process pipeline lock (`services/pipeline_lock.py`) is also required — instance-level locks don't work on multi-worker Render deploys.
+
+11. **Hard-gate on null `sharesOutstanding`** — both `dcfEngine` and `compsEngine` now return `null` implied prices (with a UI warning) when shares are missing. Don't reintroduce a `?? 1` fallback; it silently produces $50B-per-share targets for ADRs and post-split edge cases.
 
 ---
 
