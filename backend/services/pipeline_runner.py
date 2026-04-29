@@ -144,12 +144,34 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
     info = _yf_call_with_retry(lambda: t.info or {})
 
     # ── About sheet ────────────────────────────────────────────────────────────
+    # yfinance occasionally returns longBusinessSummary as None (most often
+    # for non-US tickers, ADRs, or rate-limited responses). Try the known
+    # alternate keys before falling back to a placeholder so the
+    # OverviewTab Business Context card never renders blank.
+    business_summary = (
+        info.get("longBusinessSummary")
+        or info.get("description")
+        or info.get("summary")
+        or ""
+    )
+    if isinstance(business_summary, str):
+        business_summary = business_summary.strip()
+    if not business_summary:
+        sector = info.get("sector") or "—"
+        industry = info.get("industry") or "—"
+        business_summary = (
+            f"Business summary unavailable from data provider. "
+            f"Sector: {sector}. Industry: {industry}. "
+            f"Try re-running Analyze in 60 seconds — Yahoo Finance frequently "
+            f"omits the long-form description on rate-limited responses."
+        )
+
     about_data = {
         "Symbol":           _safe(info.get("symbol"), ticker),
         "Company Name":     _safe(info.get("longName"), ""),
         "Sector":           _safe(info.get("sector"), ""),
         "Industry":         _safe(info.get("industry"), ""),
-        "Business Summary": _safe(info.get("longBusinessSummary"), ""),
+        "Business Summary": business_summary,
         "Current Price":    _safe(info.get("currentPrice") or info.get("regularMarketPrice")),
         "Market Cap":       _safe(info.get("marketCap")),
         "Country":          _safe(info.get("country"), ""),

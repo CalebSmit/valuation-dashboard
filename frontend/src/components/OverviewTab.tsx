@@ -110,31 +110,42 @@ export function OverviewTab({ run, blendedOutput }: OverviewTabProps) {
         </div>
       )}
 
-      {/* Narrative context — side by side on desktop */}
-      {(data?.businessSummary || run.assumptions?.investment_thesis) && (
-        <div className="card p-4 grid grid-cols-1 md:grid-cols-2 gap-5">
-          {run.assumptions?.investment_thesis && (
-            <div>
-              <h4 className="text-xs uppercase tracking-wider mb-2 font-mono clr-muted">
-                Investment Thesis
-              </h4>
-              <p className="text-sm leading-relaxed font-sans clr-text narrative-clamp">
-                {run.assumptions.investment_thesis}
-              </p>
-            </div>
-          )}
-          {data?.businessSummary && (
-            <div>
-              <h4 className="text-xs uppercase tracking-wider mb-2 font-mono clr-muted">
-                Business Context
-              </h4>
-              <p className="text-sm leading-relaxed font-sans clr-text narrative-clamp">
-                {data.businessSummary}
-              </p>
-            </div>
+      {/* Narrative context — side by side on desktop. Always render the
+          card so an absent thesis or business summary surfaces as
+          "(Unavailable for this run)" instead of silently disappearing
+          and leaving a hole in the page. */}
+      <div className="card p-4 grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <h4 className="text-xs uppercase tracking-wider mb-2 font-mono clr-muted">
+            Investment Thesis
+          </h4>
+          {run.assumptions?.investment_thesis ? (
+            <p className="text-sm leading-relaxed font-sans clr-text narrative-clamp">
+              {run.assumptions.investment_thesis}
+            </p>
+          ) : (
+            <p className="text-sm leading-relaxed font-sans italic clr-muted">
+              Investment thesis was not produced for this run. This usually
+              indicates the AI response was truncated mid-output. Re-run
+              Analyze to regenerate.
+            </p>
           )}
         </div>
-      )}
+        <div>
+          <h4 className="text-xs uppercase tracking-wider mb-2 font-mono clr-muted">
+            Business Context
+          </h4>
+          {data?.businessSummary ? (
+            <p className="text-sm leading-relaxed font-sans clr-text narrative-clamp">
+              {data.businessSummary}
+            </p>
+          ) : (
+            <p className="text-sm leading-relaxed font-sans italic clr-muted">
+              Business summary unavailable from data provider for this run.
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Football Field — visual centerpiece, no duplicate implied prices table */}
       <div className="p-4 card valuation-hero">
@@ -179,12 +190,14 @@ export function OverviewTab({ run, blendedOutput }: OverviewTabProps) {
         />
       </div>
 
-      {/* Key Risks — styled pills */}
-      {run.assumptions?.key_risks && run.assumptions.key_risks.length > 0 && (
-        <div className="p-4 card">
-          <h4 className="text-xs uppercase tracking-wider mb-3 font-mono clr-muted">
-            Key Risks
-          </h4>
+      {/* Key Risks — styled pills. Always render the card so an absent
+          AI risk list shows a clear "regenerate" prompt instead of
+          silently disappearing. */}
+      <div className="p-4 card">
+        <h4 className="text-xs uppercase tracking-wider mb-3 font-mono clr-muted">
+          Key Risks
+        </h4>
+        {run.assumptions?.key_risks && run.assumptions.key_risks.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {run.assumptions.key_risks.map((risk, i) => (
               <span
@@ -195,8 +208,13 @@ export function OverviewTab({ run, blendedOutput }: OverviewTabProps) {
               </span>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm font-sans italic clr-muted leading-relaxed">
+            Key risks were not produced for this run — the AI response was
+            truncated. Re-run Analyze to regenerate.
+          </p>
+        )}
+      </div>
     </div>
   )
 }

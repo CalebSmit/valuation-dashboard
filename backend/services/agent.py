@@ -335,8 +335,28 @@ ASSUMPTIONS_TOOL = {
                     "key_assumptions": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
                 },
             },
-            "investment_thesis": {"type": "string", "maxLength": 500},
-            "key_risks": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+            "investment_thesis": {
+                "type": "string",
+                "minLength": 80,
+                "maxLength": 500,
+                "description": (
+                    "REQUIRED. 2–4 sentence investment thesis written from the perspective "
+                    "of recommending or rejecting the position. Cover what drives the upside "
+                    "case (revenue / margin / multiple) and the single most important catalyst. "
+                    "Never return an empty string."
+                ),
+            },
+            "key_risks": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 10},
+                "minItems": 3,
+                "maxItems": 5,
+                "description": (
+                    "REQUIRED. 3–5 specific company-level risks (not generic risks like "
+                    "'market volatility'). Reference the actual business — concentration, "
+                    "regulatory, competitive moat erosion, etc. Never return an empty array."
+                ),
+            },
             "valuation_config": {
                 "type": "object",
                 "description": "Recommended DCF configuration and blend weights for the final price target",

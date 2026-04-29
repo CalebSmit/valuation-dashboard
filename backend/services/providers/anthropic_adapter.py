@@ -270,12 +270,26 @@ class AnthropicAdapter:
 
         _REQUIRED = {"dcf", "wacc", "ddm", "comps", "scenarios", "forecast", "investment_thesis", "key_risks"}
 
+        def _has_meaningful_narrative(rev: dict[str, Any]) -> bool:
+            """Reject revisions where the model dropped thesis/risks to fit
+            tokens. Better to keep the original (which had them) than promote
+            a revision that nukes the user-visible narrative."""
+            thesis = rev.get("investment_thesis")
+            risks = rev.get("key_risks")
+            thesis_ok = isinstance(thesis, str) and len(thesis.strip()) >= 40
+            risks_ok = isinstance(risks, list) and len(risks) >= 1 and any(
+                isinstance(r, str) and r.strip() for r in risks
+            )
+            return thesis_ok and risks_ok
+
         for block in response.content:
             if hasattr(block, "type") and block.type == "tool_use" and block.name == "set_valuation_assumptions":
                 revised = dict(block.input)
-                # Only accept the Haiku result if it contains all required top-level fields.
-                # If it's truncated/incomplete (token limit), fall back to the original Sonnet result.
-                if _REQUIRED.issubset(revised.keys()):
+                # Accept the revision only if (a) all required top-level
+                # keys are present and (b) the narrative fields actually
+                # have content. Otherwise keep the original which already
+                # passed the same check at generation time.
+                if _REQUIRED.issubset(revised.keys()) and _has_meaningful_narrative(revised):
                     if on_step:
                         on_step("Self-review found issues — assumptions revised")
                     return revised
