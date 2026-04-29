@@ -6,8 +6,34 @@ import type { FinancialData, CompetitorData } from '../types/FinancialData.ts'
 import type { AgentLogEntry } from '../types/ValuationRun.ts'
 import { API_BASE } from '../utils/constants.ts'
 
+// Stable prefixes / unique substrings of every message classifyError can
+// produce. If an incoming message already starts with one of these, it
+// has already been classified once (probably by runPipeline or runAgent
+// throwing), and we must NOT re-classify — the second pass would
+// otherwise misroute "Yahoo Finance is rate limiting…" through the
+// generic `rate limit` branch and surface "Rate limited — 60–90s".
+const _CLASSIFIED_MESSAGES: readonly string[] = [
+  'Backend is waking up',
+  'Data not found. Enter a ticker',
+  'Ticker not found or no data available',
+  'Invalid Anthropic API key',
+  'Invalid API key — check your key in Settings',
+  'A data pipeline is already running',
+  'Yahoo Finance is rate limiting',
+  'Rate limited — wait 60–90 seconds',
+  'Pipeline timed out',
+  'Pipeline was interrupted',
+  'Analysis timed out',
+]
+
+function _isAlreadyClassified(raw: string): boolean {
+  return _CLASSIFIED_MESSAGES.some(prefix => raw.startsWith(prefix))
+}
+
 /** Classify a raw error message into a user-friendly string. */
 export function classifyError(raw: string): string {
+  if (_isAlreadyClassified(raw)) return raw
+
   const lower = raw.toLowerCase()
 
   // Backend cold start / unreachable
@@ -32,14 +58,15 @@ export function classifyError(raw: string): string {
     return 'Data not found. Enter a ticker and click Analyze — financial data is fetched automatically.'
   }
 
-  // Ticker not found or delisted
+  // Ticker not found or delisted. Note: 'yfinance' is intentionally
+  // NOT a marker here — it appears in YFRateLimitError messages too,
+  // and the Yahoo rate-limit branch below needs to win for those.
   if (
     lower.includes('no data') ||
     lower.includes('not found') ||
     lower.includes('invalid ticker') ||
     lower.includes('delisted') ||
     lower.includes('no price data') ||
-    lower.includes('yfinance') ||
     lower.includes('no history found')
   ) {
     return 'Ticker not found or no data available. Check the symbol and try again.'
@@ -70,14 +97,37 @@ export function classifyError(raw: string): string {
     return 'A data pipeline is already running. Please wait for it to finish, then try again.'
   }
 
-  // Yahoo Finance / yfinance rate limit (during pipeline phase — before AI is called)
+  // Yahoo Finance / yfinance rate limit (during pipeline phase — before
+  // AI is called). Order matters: this branch must fire before the
+  // generic Anthropic rate-limit branch below, otherwise the generic
+  // "rate limit" check misroutes a Yahoo 429 into the 60-90s message.
+  // We avoid matching bare "Pipeline failed" since that can wrap any
+  // pipeline error — we require an explicit rate-limit signal too.
+  const hasYahooSignal =
+    lower.includes('yfratelimiterror') ||
+    lower.includes('yfinance') ||
+    lower.includes('yahoo')
+  const hasRateLimitSignal =
+    lower.includes('too many requests') ||
+    lower.includes('try after a while') ||
+    lower.includes('429') ||
+    lower.includes('rate limit')
+  const isAnthropicCtx = lower.includes('anthropic')
   if (
-    lower.includes('pipeline failed') ||
-    lower.includes('pipeline failed:') ||
-    (lower.includes('429') && (lower.includes('yahoo') || lower.includes('yfinance') || lower.includes('pipeline'))) ||
-    (lower.includes('too many requests') && !lower.includes('anthropic'))
+    !isAnthropicCtx &&
+    (
+      hasYahooSignal && hasRateLimitSignal
+      || (lower.includes('pipeline failed') && hasRateLimitSignal)
+      || hasYahooSignal /* yfinance / YFRateLimitError without explicit rate hint */
+    )
   ) {
     return 'Yahoo Finance is rate limiting — wait 30 seconds and click Analyze again.'
+  }
+
+  // Other pipeline failure (non-rate-limit): pass the message through
+  // so the user sees the actual reason.
+  if (lower.includes('pipeline failed') && !lower.includes('anthropic')) {
+    return raw.replace(/^Pipeline failed:\s*/i, 'Pipeline error: ')
   }
 
   // Anthropic / AI provider rate limit

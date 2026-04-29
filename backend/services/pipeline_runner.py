@@ -26,7 +26,11 @@ import yfinance as yf
 from config import RAW_DATA_PATH
 from services.pipeline_lock import PipelineLock
 
-_YF_DELAY = 0.4   # seconds between yfinance calls — avoids Yahoo 429s
+# Spacing between successful yfinance calls. Yahoo's anonymous-throttle
+# threshold has tightened: 0.4s used to be safe but consistently
+# triggers 429s during step-4 analyst-estimate bursts. 1.0s adds ~10s
+# to a full pipeline run but keeps us under the rate-limit ceiling.
+_YF_DELAY = 1.0
 
 # File-based mutex on the persistent data volume so the lock survives
 # Render restarts and coordinates across multiple worker instances that
@@ -34,8 +38,13 @@ _YF_DELAY = 0.4   # seconds between yfinance calls — avoids Yahoo 429s
 _PIPELINE_LOCK = PipelineLock(RAW_DATA_PATH.parent / ".pipeline.lock")
 
 
-def _yf_call_with_retry(fn, retries: int = 3, delay: float = 3.0):
-    """Call a yfinance getter with retry on exception (handles transient 429s)."""
+def _yf_call_with_retry(fn, retries: int = 3, delay: float = 4.0):
+    """Call a yfinance getter with retry on exception (handles transient 429s).
+
+    Backoff: 4s, 8s, 16s. A long single retry is more effective than many
+    short ones — Yahoo's per-IP bucket refills slowly, so retrying every
+    second after a 429 just keeps the bucket pinned at zero.
+    """
     last_exc: Exception | None = None
     for attempt in range(retries):
         try:
@@ -223,9 +232,22 @@ def _run_sync_pipeline(ticker: str, progress_cb: Any) -> None:
         df["period"] = df["period"].astype(str)
         return df
 
-    earnings_est_df  = _reset_period_index(_yf_call_with_retry(lambda: t.earnings_estimate))
-    revenue_est_df   = _reset_period_index(_yf_call_with_retry(lambda: t.revenue_estimate))
-    eps_trend_df     = _reset_period_index(_yf_call_with_retry(lambda: t.eps_trend))
+    # Analyst estimate calls are non-critical — wrap each in try/except
+    # so a single Yahoo 429 doesn't abort an otherwise-successful pipeline.
+    # Without this, step 4 was the most common point of failure during
+    # rate-limit spikes because three rapid calls hit Yahoo back-to-back.
+    try:
+        earnings_est_df = _reset_period_index(_yf_call_with_retry(lambda: t.earnings_estimate))
+    except Exception:
+        earnings_est_df = pd.DataFrame()
+    try:
+        revenue_est_df = _reset_period_index(_yf_call_with_retry(lambda: t.revenue_estimate))
+    except Exception:
+        revenue_est_df = pd.DataFrame()
+    try:
+        eps_trend_df = _reset_period_index(_yf_call_with_retry(lambda: t.eps_trend))
+    except Exception:
+        eps_trend_df = pd.DataFrame()
 
     # Growth forecasts (stock vs index)
     try:
