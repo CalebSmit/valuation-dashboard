@@ -173,6 +173,27 @@ async def analyze_ticker(
         yield _sse("step", "Loading financial data from raw_data.xlsx...")
         summary = extract_financial_summary(reader)
 
+        # Strip UI-only blocks before sending to the AI agent. These fields
+        # (ownership, news, options chain, dividend detail, earnings calendar)
+        # are rendered in the dashboard but add nothing to assumption
+        # generation — and noticeably bloat the prompt's input-token count,
+        # which makes the Anthropic tokens-per-minute limiter trip on
+        # back-to-back analyses. The dashboard already gets these blocks
+        # from /api/financials/summary, so the agent doesn't need them.
+        agent_summary = {
+            k: v for k, v in summary.items()
+            if k not in {
+                "optionsSummary",
+                "institutionalHolders",
+                "insiderTransactions",
+                "ownershipConcentration",
+                "recentNews",
+                "earningsCalendar",
+                "earningsSurpriseSummary",
+                "dividendMetricsDetail",
+            }
+        }
+
         # Step 3: Compute historical ratios for self-review
         historical_ratios: dict | None = None
         try:
@@ -216,7 +237,7 @@ async def analyze_ticker(
             try:
                 result = await run_valuation_agent(
                     ticker=ticker,
-                    financial_summary=summary,
+                    financial_summary=agent_summary,
                     api_key=resolved_api_key,
                     provider=request.provider,
                     deep_research=request.deep_research,
